@@ -15,15 +15,78 @@ const messages = {
     },
     home: {
       title: "Welcome to Flint",
-      body: "Flint will probe this Mac, recommend one model that fits it, and let you chat with it — all locally, no cloud.",
-      bridge: "Bridge test:",
+      body: "Flint runs local AI on this Mac — no cloud, no accounts. Your data stays on the device.",
+      probing: "Looking at this Mac…",
+      unsupported: {
+        title: "Flint needs Apple Silicon",
+        body: "This Mac uses an Intel chip, which Flint doesn't support yet — local models wouldn't be satisfying on it. A chat website will do more for you today.",
+      },
+      honesty: {
+        title: "What local AI can do",
+        chip: "Your Mac:",
+        strengths:
+          "Local models run entirely on this Mac. Your files and messages never leave the device — great for private drafting, summarizing, and working offline.",
+        limits:
+          "They're not ChatGPT. Expect shallower reasoning on hard problems and slower answers on big documents. In exchange: private, offline, and yours.",
+        continue: "Show me what fits this Mac",
+      },
+      recommend: {
+        title: "One model for this Mac",
+        lede: "No catalog, no jargon. Based on this hardware, we recommend exactly one model.",
+        size: "Size on disk",
+        license: "License",
+        source: "Source",
+        asOf: "Recommendations as of",
+        agentLocked: "Agent mode (files, commands) is on the way in a later phase.",
+        download: "Download",
+        installed: "Installed — ready to chat",
+        continue: "Continue",
+      },
+      installing: {
+        title: "Downloading",
+        status: "Downloading",
+        cancel: "Cancel",
+      },
+      ready: {
+        title: "You're ready",
+        body: "{model} is installed and runs on this Mac. Chat arrives in Phase 1.",
+      },
+      failed: {
+        title: "Something went wrong",
+        retry: "Try again",
+      },
+      cancelled: {
+        title: "Download cancelled",
+        body: "Nothing was changed — the download can be resumed later.",
+        ok: "OK",
+      },
     },
     settings: {
       title: "Settings",
-      body: "Engine status and model management land here in Phase 0.",
+      body: "Engine status and model management.",
+      engine: {
+        running: "Engine running",
+        version: "version",
+        notRunning: "Engine not running",
+        launch: "Launch Ollama",
+        launchHint:
+          "Chat needs Ollama running. A later phase bundles a standalone engine instead.",
+        launching: "Launching…",
+      },
+      models: {
+        title: "Models on disk",
+        none: "No models on disk.",
+        recommended: "recommended for this Mac",
+        onDisk: "on disk",
+        delete: "Delete",
+        confirm: "Delete {model}?",
+        confirmYes: "Delete",
+        confirmNo: "Keep",
+      },
+      error: "Something went wrong loading settings.",
     },
-    status: {
-      ready: "Ready",
+    common: {
+      retry: "Try again",
     },
   },
 };

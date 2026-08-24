@@ -1,4 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  EngineStatusView,
+  InstallState,
+  ProbeResult,
+  Recommendation,
+} from "./types";
 
 /**
  * Typed wrappers around Tauri `invoke()` calls. One function per Rust command
@@ -9,7 +15,39 @@ import { invoke } from "@tauri-apps/api/core";
  * register it in `generate_handler![]` in src-tauri/src/lib.rs.
  */
 
-/** Bridge-works test — removed in Phase 0 once the probe command round-trips. */
-export async function greet(name: string): Promise<string> {
-  return invoke<string>("greet", { name });
+/** Hardware probe (local only — the honesty screen + tier gate). */
+export async function probeMachine(): Promise<ProbeResult> {
+  return invoke<ProbeResult>("probe_machine");
+}
+
+/** The single recommendation for this machine (probe + cookbook + install state). */
+export async function getRecommendation(): Promise<Recommendation> {
+  return invoke<Recommendation>("get_recommendation");
+}
+
+/** Engine reachability + on-disk models + whether the recommended model is installed. */
+export async function engineStatus(): Promise<EngineStatusView> {
+  return invoke<EngineStatusView>("engine_status");
+}
+
+/** Consent-gated install — kicks off the pull; poll `getInstallProgress`. */
+export async function startInstall(model: string): Promise<void> {
+  return invoke<void>("start_install", { model });
+}
+
+export async function getInstallProgress(): Promise<InstallState> {
+  return invoke<InstallState>("get_install_progress");
+}
+
+export async function cancelInstall(): Promise<void> {
+  return invoke<void>("cancel_install");
+}
+
+export async function deleteModel(tag: string): Promise<void> {
+  return invoke<void>("delete_model", { tag });
+}
+
+/** Launch Ollama.app (`/usr/bin/open` — absolute path, doc 05). */
+export async function launchOllama(): Promise<void> {
+  return invoke<void>("launch_ollama");
 }

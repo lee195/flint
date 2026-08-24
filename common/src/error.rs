@@ -21,3 +21,14 @@ pub enum AppError {
     #[error("unknown: {0}")]
     Unknown(String),
 }
+
+/// Serializes as the Display message so Tauri commands can return `Result<T, AppError>`
+/// and the frontend receives a plain-language error string (never an internal type shape).
+impl serde::Serialize for AppError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}

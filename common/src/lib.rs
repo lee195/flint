@@ -1,10 +1,12 @@
-//! Shared crate for Flint — no Tauri deps (serde only). The future home of the
-//! hardware probe, the cookbook tier table, and the engine backend trait (Phase 0).
-//! Pre-Phase 0 ships only the error type, the canonical data-dir owner, and a types
-//! placeholder (per flint-design/PLAN.md).
+//! Shared crate for Flint — no Tauri deps. The hardware probe, the cookbook tier table,
+//! the engine backend trait (+ the v0 Ollama implementation), and the canonical data-dir
+//! owner live here so both the app and any future sidecar share one vocabulary.
 
 pub mod config;
+pub mod cookbook;
+pub mod engine;
 pub mod error;
+pub mod probe;
 pub mod types;
 
 pub use error::AppError;

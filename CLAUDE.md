@@ -13,9 +13,11 @@ the sibling `../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`05`); 
 (`PLAN.md`) is Pre-Phase 0 bootstrap + Phase 0 (probe/cookbook/engine/install) + Phase 1
 (chat).
 
-**Current state: Pre-Phase 0.** The scaffold is a Tauri 2 + Vue 3 app with a `greet`
-bridge-works test. No probe, no cookbook, no chat yet. Phase 0 starts with the model/tier
-spike (top-tier pick from the on-disk Ollama candidates `qwen3.6` / `qwen3-coder`).
+**Current state: Phase 0.** The app probes the machine (`common::probe`, sysctl), shows the
+honesty screen, recommends **one** model for the tier (`common::cookbook` — top tier is
+`qwen3.6:latest` with `think:false`, resolved 2026-08-24), and installs it on consent via
+`common::engine` (`OllamaBackend`, polled progress). Chat is Phase 1 (next). Agent mode
+(opencode harness + safety net) is Phase 2.
 
 **v0 engine: Ollama backend first** behind the `EngineBackend` trait (`common/`, Phase 0).
 The llama.cpp sidecar is the Phase 2 swap behind the same interface. All HTTP happens in
@@ -26,7 +28,8 @@ Rust — the frontend never does HTTP.
 `flint` is a two-crate Cargo workspace plus a Vue frontend:
 
 - `common/` — shared, no-Tauri library: the canonical data-dir owner (`common::config`),
-  error type, and (from Phase 0) the probe, cookbook tier table, and engine backend trait.
+  error type, hardware probe (`common::probe`), cookbook tier table (`common::cookbook`),
+  and the engine backend trait + `OllamaBackend` impl (`common::engine`).
 - `src-tauri/` — the Tauri 2 app backend: commands + plugins.
 - `src/` — Vue 3 + TypeScript + Vite frontend. JS toolchain is **Deno** (not Bun/npm
   scripts): deps in `package.json` (installed with `deno install`), tasks in `deno.json`.

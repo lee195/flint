@@ -8,6 +8,12 @@ authors.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2"
+async-trait = "0.1"
+futures-util = "0.3"
+libc = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
 
 [dev-dependencies]
+httpmock = "0.7"
 tempfile = "3"
