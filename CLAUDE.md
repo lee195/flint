@@ -65,8 +65,8 @@ On first launch the app ensures the dir exists.
   will fail).
 - `deno task build` — type-check (`vue-tsc --noEmit`) and build the frontend to `dist/`.
 - `deno task check` — type-check only.
-- `deno task tauri build` — produce a distributable native binary/installer (unsigned in
-  v0; signing/notarization is Phase 3).
+- `deno task tauri build` — produce a distributable native binary/installer (unsigned →
+  ad-hoc until the Developer ID cert lands; the signed+notarized path is `docs/signing-runbook.md`).
 - `cargo build --workspace` / `cargo test -p common` — Rust workspace build/tests.
 
 The Vite dev server is locked to port **1420** (`strictPort: true`) because Tauri expects
