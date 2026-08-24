@@ -25,6 +25,13 @@ const { t } = useI18n();
             {{ t("nav.chat") }}
           </RouterLink>
           <RouterLink
+            to="/agent"
+            class="text-muted-foreground hover:text-foreground"
+            active-class="text-foreground font-medium"
+          >
+            {{ t("nav.agent") }}
+          </RouterLink>
+          <RouterLink
             to="/settings"
             class="text-muted-foreground hover:text-foreground"
             active-class="text-foreground font-medium"

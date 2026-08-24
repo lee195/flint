@@ -78,3 +78,26 @@ export interface ChatHistoryView {
   messages: ChatMessage[];
   model: string | null;
 }
+
+export type AgentEvent =
+  | { kind: "Delta"; text: string }
+  | { kind: "ToolCall"; callId: string; tool: string; input: string }
+  | { kind: "ToolResult"; callId: string; tool: string; ok: boolean }
+  | { kind: "Permission"; id: string; permission: string; pattern: string }
+  | { kind: "Done"; text: string }
+  | { kind: "Error"; message: string };
+
+export interface SmokeResult {
+  passed: boolean;
+  model: string;
+  tsMs: number;
+  detail: string;
+}
+
+export interface AgentStatusView {
+  running: boolean;
+  workspace: string | null;
+  unlocked: boolean;
+  lockedReason: string | null;
+  lastSmoke: SmokeResult | null;
+}

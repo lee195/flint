@@ -1,11 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AgentEvent,
+  AgentStatusView,
   ChatEvent,
   ChatHistoryView,
   EngineStatusView,
   InstallState,
   ProbeResult,
   Recommendation,
+  SmokeResult,
 } from "./types";
 
 /**
@@ -75,4 +78,39 @@ export async function cancelChat(): Promise<void> {
 
 export async function newChat(): Promise<void> {
   return invoke<void>("new_chat");
+}
+
+/** Choose the folder the agent may work in (validated on the Rust side). */
+export async function setWorkspace(path: string): Promise<void> {
+  return invoke<void>("set_workspace", { path });
+}
+
+/** Agent view state: run status, workspace, and the capability gate. */
+export async function getAgentStatus(): Promise<AgentStatusView> {
+  return invoke<AgentStatusView>("get_agent_status");
+}
+
+/** Start an agent run (gated by tier + smoke test; pre-run snapshot taken). */
+export async function runAgent(prompt: string): Promise<void> {
+  return invoke<void>("run_agent", { prompt });
+}
+
+export async function pollAgentOutput(): Promise<AgentEvent[]> {
+  return invoke<AgentEvent[]>("poll_agent_output");
+}
+
+export async function respondPermission(id: string, allow: boolean): Promise<void> {
+  return invoke<void>("respond_permission", { id, allow });
+}
+
+export async function cancelAgent(): Promise<void> {
+  return invoke<void>("cancel_agent");
+}
+
+export async function runSmokeTest(): Promise<SmokeResult> {
+  return invoke<SmokeResult>("run_smoke_test");
+}
+
+export async function restoreSnapshot(): Promise<void> {
+  return invoke<void>("restore_snapshot");
 }

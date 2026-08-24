@@ -175,3 +175,65 @@ pub struct ChatHistoryView {
     pub messages: Vec<ChatMessage>,
     pub model: Option<String>,
 }
+
+/// A buffered agent-run event, drained by the frontend poll (like chat events).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum AgentEvent {
+    Delta {
+        text: String,
+    },
+    ToolCall {
+        call_id: String,
+        tool: String,
+        input: String,
+    },
+    ToolResult {
+        call_id: String,
+        tool: String,
+        ok: bool,
+    },
+    Permission {
+        id: String,
+        permission: String,
+        pattern: String,
+    },
+    Done {
+        text: String,
+    },
+    Error {
+        message: String,
+    },
+}
+
+/// The agent view's state: run status, the chosen workspace, and the capability gate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatusView {
+    pub running: bool,
+    pub workspace: Option<String>,
+    /// Tier floor (GB32+) AND a passed smoke test (doc 01).
+    pub unlocked: bool,
+    pub locked_reason: Option<String>,
+    pub last_smoke: Option<SmokeResult>,
+}
+
+/// Result of the capability smoke test (doc 01), persisted across launches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SmokeResult {
+    pub passed: bool,
+    pub model: String,
+    pub ts_ms: i64,
+    pub detail: String,
+}
+
+/// One reviewable agent run: the pre-run snapshot marker + the run's final text.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRunView {
+    pub run_id: String,
+    pub text: String,
+    pub snapshot_ts_ms: i64,
+    pub changed_files: Vec<String>,
+}

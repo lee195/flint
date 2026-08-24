@@ -13,12 +13,20 @@ the sibling `../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`05`); 
 (`PLAN.md`) is Pre-Phase 0 bootstrap + Phase 0 (probe/cookbook/engine/install) + Phase 1
 (chat).
 
-**Current state: Phase 1.** The app probes the machine (`common::probe`, sysctl), shows the
-honesty screen, recommends **one** model for the tier (`common::cookbook` — top tier is
-`qwen3.6:latest` with `think:false`, resolved 2026-08-24), installs it on consent via
-`common::engine` (`OllamaBackend`, polled progress), and chats with it (`/chat` view,
-streamed via `common::engine::chat`, JSONL transcripts in `common::chat_store` under
-`~/.flint/chat/current.jsonl`). Agent mode (opencode harness + safety net) is Phase 2.
+**Current state: Phase 2.** Everything through the agent is shipped:
+- **Chat** (`/chat`): streamed via `common::engine::chat`, JSONL transcripts in
+  `common::chat_store` (`~/.flint/chat/current.jsonl`).
+- **Agent** (`/agent`): a fresh `opencode serve` per run (workspace cwd, isolated config via
+  `OPENCODE_CONFIG_DIR` + `OPENCODE_CONFIG_CONTENT`, spawn-time `GET /config` permission
+  assertion) driven by `common::agent::OpencodeClient`; events buffered and polled ~150ms;
+  inline permission banners answered via `POST /session/{id}/permissions/{pid}`; capability
+  smoke test (`common::smoke`) gates unlock (tier GB32+ AND passed); `git2` detached snapshot
+  before each run + "Restore snapshot" (`common::snapshot`, `~/.flint/snapshots/`); path-
+  confinement `tool.execute.before` plugin written to `~/.flint/opencode/plugin/`.
+- Probe (`common::probe`), cookbook (`common::cookbook`, top tier `qwen3.6:latest`,
+  `think:false`), install via `common::engine` (`OllamaBackend`).
+
+Phase 3 (packaging/signing, llama.cpp sidecar swap, bundling opencode) is next.
 
 **v0 engine: Ollama backend first** behind the `EngineBackend` trait (`common/`, Phase 0).
 The llama.cpp sidecar is the Phase 2 swap behind the same interface. All HTTP happens in
@@ -30,8 +38,10 @@ Rust — the frontend never does HTTP.
 
 - `common/` — shared, no-Tauri library: the canonical data-dir owner (`common::config`),
   error type, hardware probe (`common::probe`), cookbook tier table (`common::cookbook`),
-  engine backend trait + `OllamaBackend` impl (`common::engine`), and chat transcript
-  persistence (`common::chat_store`).
+  engine backend trait + `OllamaBackend` impl (`common::engine`), chat transcript
+  persistence (`common::chat_store`), the opencode client + isolated-config builder
+  (`common::agent`), the capability smoke record (`common::smoke`), and the git2 snapshot
+  (`common::snapshot`).
 - `src-tauri/` — the Tauri 2 app backend: commands + plugins.
 - `src/` — Vue 3 + TypeScript + Vite frontend. JS toolchain is **Deno** (not Bun/npm
   scripts): deps in `package.json` (installed with `deno install`), tasks in `deno.json`.

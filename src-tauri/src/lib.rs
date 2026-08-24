@@ -1,3 +1,5 @@
+mod agent;
+
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -7,8 +9,8 @@ use common::cookbook;
 use common::engine::{EngineBackend, OllamaBackend};
 use common::probe;
 use common::types::{
-    ChatEvent, ChatHistoryView, ChatMessage, EngineStatusView, InstallState, ProbeResult,
-    PullProgress, Recommendation,
+    AgentEvent, AgentStatusView, ChatEvent, ChatHistoryView, ChatMessage, EngineStatusView,
+    InstallState, ProbeResult, PullProgress, Recommendation, SmokeResult,
 };
 use common::{config, AppError};
 
@@ -268,11 +270,63 @@ async fn new_chat() -> Result<(), AppError> {
     Ok(())
 }
 
+// ============================ Agent (Phase 2) ============================
+
+/// Choose the folder the agent may work in (folder picker / paste-path / drag-drop).
+#[tauri::command]
+fn set_workspace(path: String) -> Result<(), AppError> {
+    agent::set_workspace(path)
+}
+
+/// Agent view state: run status, workspace, and the capability gate (tier + smoke).
+#[tauri::command]
+fn get_agent_status() -> Result<AgentStatusView, AppError> {
+    agent::status()
+}
+
+/// Start an agent run (gated by tier floor + passed smoke test; pre-run snapshot).
+#[tauri::command]
+async fn run_agent(prompt: String) -> Result<(), AppError> {
+    agent::run_agent(prompt).await
+}
+
+/// Drain buffered agent events (poll ~150 ms while running; auto-denies stale permissions).
+#[tauri::command]
+async fn poll_agent_output() -> Result<Vec<AgentEvent>, AppError> {
+    Ok(agent::drain_output().await)
+}
+
+/// Answer a permission banner (Allow → once, Deny → reject).
+#[tauri::command]
+async fn respond_permission(id: String, allow: bool) -> Result<(), AppError> {
+    agent::respond_permission(id, allow).await
+}
+
+#[tauri::command]
+async fn cancel_agent() -> Result<(), AppError> {
+    agent::cancel_agent().await
+}
+
+/// Run the capability smoke test (doc 01) and persist the result.
+#[tauri::command]
+async fn run_smoke_test() -> Result<SmokeResult, AppError> {
+    agent::run_smoke_test().await
+}
+
+/// Restore the workspace to the pre-run snapshot (review/undo).
+#[tauri::command]
+fn restore_snapshot() -> Result<(), AppError> {
+    agent::restore_snapshot()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
             let _ = std::fs::create_dir_all(config::data_dir());
+            agent::init().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
+            let _ = agent::ensure_confinement_plugin();
             ENGINE
                 .set(OllamaBackend::new("http://127.0.0.1:11434".to_string()))
                 .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("engine already initialized")))?;
@@ -302,6 +356,14 @@ pub fn run() {
             poll_chat_output,
             cancel_chat,
             new_chat,
+            set_workspace,
+            get_agent_status,
+            run_agent,
+            poll_agent_output,
+            respond_permission,
+            cancel_agent,
+            run_smoke_test,
+            restore_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
