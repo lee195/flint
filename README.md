@@ -1,0 +1,49 @@
+# Flint
+
+A standalone macOS app that gives a non-technical user working local AI with zero
+dev-tool gates. It probes the machine's hardware, recommends **one** model that fits
+(the "cookbook"), installs it on consent, and offers a plain **chat** — all local, no
+cloud, no vendor. Its reason to exist is **vendor resilience** (a single-point-of-failure
+hedge must be independent of any vendor's cloud). Design docs: `../flint-design/`
+(`STATE.md` → `PLAN.md` → `docs/00`–`05`).
+
+**Status: v0 (Phase 0 + 1)** — probe + cookbook + engine interface + install + chat.
+Currently at Pre-Phase 0: the scaffold is in place with a `greet` bridge-works test; no
+probe, cookbook, or chat yet. Agent mode (opencode harness + safety net) is Phase 2.
+
+## Stack
+
+- **Tauri v2** — desktop shell; Rust backend (`src-tauri/`).
+- **Vue 3 + TypeScript** — `<script setup>` SFCs (`src/`).
+- **Vite + Deno** — bundler + JS toolchain (`deno.json` tasks; deps in `package.json`,
+  installed with `deno install`).
+- **Tailwind CSS v4** — via `@tailwindcss/vite`.
+- **vue-router v4** — hash history (WKWebView-safe).
+- **vue-i18n** — all chrome strings in the `en` catalog (i18n-ready from day 1).
+
+## Commands
+
+```bash
+deno install            # install npm deps into node_modules
+deno task tauri dev     # run the full desktop app — primary dev loop
+deno task dev           # Vite frontend only (no Rust; `invoke` calls will fail)
+deno task build         # type-check (vue-tsc) + build frontend to dist/
+deno task tauri build   # produce a distributable native binary/installer (unsigned in v0)
+cargo build --workspace # build the Rust workspace (common + src-tauri)
+cargo test -p common    # shared-crate unit tests
+```
+
+## Structure
+
+- `common/` — shared no-Tauri crate: canonical data-dir owner (`~/.flint/`), error type,
+  and (from Phase 0) the hardware probe, cookbook tier table, and engine backend trait.
+- `src-tauri/` — Tauri app backend (commands + plugins; `main.rs` is a thin shim).
+- `src/` — Vue frontend (`main.ts`, `App.vue`, `router.ts`, `i18n.ts`, `views/`, `lib/`,
+  `composables/`).
+
+See `CLAUDE.md` for the Tauri bridge pattern, the Deno toolchain rules, and the binding
+WKWebView rules.
+
+## Recommended IDE Setup
+
+- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
