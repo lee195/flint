@@ -11,6 +11,16 @@ hedge must be independent of any vendor's cloud). Design docs: `../flint-design/
 Currently at Pre-Phase 0: the scaffold is in place with a `greet` bridge-works test; no
 probe, cookbook, or chat yet. Agent mode (opencode harness + safety net) is Phase 2.
 
+## Architecture
+
+![Flint v0 architecture](docs/architecture.svg)
+
+The Vue frontend (in a WKWebView) talks to the Tauri Rust backend over typed `invoke()`
+wrappers, polling for state rather than listening for events. Shared logic lives in the
+`common` crate — hardware probe, cookbook tier table, and the `EngineBackend` trait, which
+v0 satisfies with **Ollama** (localhost only; the frontend never does HTTP). Local data
+lives under `~/.flint/`. Dashed boxes are Phase 2 (agent mode, llama.cpp sidecar).
+
 ## Stack
 
 - **Tauri v2** — desktop shell; Rust backend (`src-tauri/`).

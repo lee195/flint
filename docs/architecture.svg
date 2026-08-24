@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 870" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Flint — v0 architecture</title>
+  <desc>Layer diagram of the Flint v0 app: Vue frontend in a Tauri WebView, Tauri Rust backend, shared common crate, Ollama inference engine, local data dir, and Phase 2 additions (dashed).</desc>
+
+  <!-- Title -->
+  <text x="20" y="18" font-size="15" font-weight="600" fill="#18181b">Flint — v0 architecture</text>
+  <text x="20" y="34" font-size="11" fill="#71717a">Phase 0 + 1 · dashed = Phase 2 (out of v0) · design: flint-design/docs/00–05</text>
+
+  <!-- ============ 1 · Frontend ============ -->
+  <rect x="20" y="44" width="560" height="210" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+  <text x="34" y="68" font-size="13" font-weight="600" fill="#3730a3">1 · Frontend — Vue 3 + TS (Tauri WebView)</text>
+  <text x="34" y="84" font-size="10" fill="#6366f1">src/ · WKWebView-safe: polling only, hash router, inline banners, i18n (en)</text>
+
+  <g font-size="10.5" fill="#1e1b4b">
+    <rect x="34" y="94" width="168" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="46" y="114" font-weight="600" fill="#3730a3">/ onboarding</text>
+    <text x="46" y="132">probe → honesty screen</text>
+    <text x="46" y="147">recommend ONE model</text>
+    <text x="46" y="162">consent-gated install</text>
+    <text x="46" y="177">→ ready to chat</text>
+
+    <rect x="214" y="94" width="168" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="226" y="114" font-weight="600" fill="#3730a3">/ chat</text>
+    <text x="226" y="132">plain pane, no params</text>
+    <text x="226" y="147">streamed, ~150ms poll</text>
+    <text x="226" y="162">cancel mid-stream</text>
+    <text x="226" y="177">JSONL transcript</text>
+
+    <rect x="394" y="94" width="168" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="406" y="114" font-weight="600" fill="#3730a3">/ settings</text>
+    <text x="406" y="132">engine status pill</text>
+    <text x="406" y="147">green / amber / grey</text>
+    <text x="406" y="162">launch Ollama</text>
+    <text x="406" y="177">model on-disk / delete</text>
+  </g>
+
+  <rect x="34" y="204" width="532" height="34" rx="6" fill="#ffffff" fill-opacity="0.6" stroke="#c7d2fe"/>
+  <text x="46" y="225" font-size="10.5" fill="#4338ca">invoke() — typed wrappers (src/lib/tauri-commands.ts) → Rust commands</text>
+
+  <!-- arrow: frontend -> backend -->
+  <line x1="300" y1="254" x2="300" y2="272" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="300,277 295,268 305,268" fill="#64748b"/>
+
+  <!-- ============ 2 · Backend ============ -->
+  <rect x="20" y="278" width="560" height="116" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+  <text x="34" y="302" font-size="13" font-weight="600" fill="#065f46">2 · Tauri 2 Rust backend (src-tauri/)</text>
+  <g font-size="10.5" fill="#064e3b">
+    <text x="34" y="322">· #[tauri::command]s registered in generate_handler![]</text>
+    <text x="34" y="339">· capability ACL (capabilities/default.json)</text>
+    <text x="34" y="356">· buffered event queue — backend buffers, frontend polls (no events)</text>
+  </g>
+
+  <!-- arrow: backend -> common -->
+  <line x1="300" y1="394" x2="300" y2="412" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="300,417 295,408 305,408" fill="#64748b"/>
+
+  <!-- ============ 3 · common ============ -->
+  <rect x="20" y="418" width="560" height="150" rx="8" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <text x="34" y="442" font-size="13" font-weight="600" fill="#92400e">3 · common crate — shared, no Tauri deps (serde only)</text>
+
+  <g font-size="10.5" fill="#451a03">
+    <rect x="34" y="452" width="266" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="46" y="471" font-weight="600" fill="#92400e">probe — sysctl</text>
+    <text x="46" y="487">chip + RAM → capability tier</text>
+
+    <rect x="310" y="452" width="256" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="322" y="471" font-weight="600" fill="#92400e">cookbook — tier table</text>
+    <text x="322" y="487">4 tiers → one model (pinned, "as of")</text>
+
+    <rect x="34" y="512" width="266" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="46" y="531" font-weight="600" fill="#92400e">EngineBackend trait</text>
+    <text x="46" y="547">health · list · ensure · chat</text>
+
+    <rect x="310" y="512" width="256" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="322" y="531" font-weight="600" fill="#92400e">config — data-dir owner</text>
+    <text x="322" y="547">~/.flint/ canonical path</text>
+  </g>
+
+  <!-- arrow: common -> Ollama (HTTP) -->
+  <text x="560" y="462" font-size="10" fill="#475569" text-anchor="end">HTTP localhost:11434</text>
+  <line x1="580" y1="477" x2="606" y2="477" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="611,477 602,472 602,482" fill="#64748b"/>
+
+  <!-- arrow: common -> data dir -->
+  <line x1="300" y1="568" x2="300" y2="586" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="300,591 295,582 305,582" fill="#64748b"/>
+
+  <!-- ============ Local data ============ -->
+  <rect x="20" y="592" width="560" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="34" y="614" font-size="13" font-weight="600" fill="#0f172a">Local data — ~/.flint/</text>
+  <g font-size="10.5" fill="#334155">
+    <text x="34" y="634">· config · chat transcripts (JSONL per conversation)</text>
+    <text x="34" y="650">· models on disk live in the engine's store (v0: Ollama)</text>
+  </g>
+
+  <!-- ============ Engine (v0) ============ -->
+  <rect x="610" y="418" width="310" height="150" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="624" y="442" font-size="13" font-weight="600" fill="#0f172a">Inference engine — v0</text>
+  <text x="624" y="458" font-size="10.5" fill="#475569">OllamaBackend (EngineBackend impl)</text>
+  <g font-size="10.5" fill="#334155">
+    <text x="624" y="478">localhost:11434 — HTTP from Rust only</text>
+    <text x="624" y="494">/api/chat · /api/pull · /api/tags</text>
+    <text x="624" y="510">frontend never does HTTP</text>
+    <text x="624" y="526">on disk already: qwen3.6 · qwen3-coder</text>
+    <text x="624" y="548" font-size="9.5" fill="#94a3b8">resumable pulls (consent-gated, doc 02)</text>
+  </g>
+
+  <!-- arrow: Ollama -> llama.cpp (phase 2 swap) -->
+  <line x1="765" y1="568" x2="765" y2="584" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <polygon points="765,589 760,580 770,580" fill="#94a3b8"/>
+
+  <!-- ============ Phase 2 (dashed) ============ -->
+  <rect x="610" y="592" width="310" height="76" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="624" y="614" font-size="12" font-weight="600" fill="#475569">llama.cpp sidecar (bundled) — Phase 2 swap</text>
+  <text x="624" y="634" font-size="10.5" fill="#64748b">same EngineBackend trait · HF download (resume + sha256)</text>
+  <text x="624" y="650" font-size="10.5" fill="#64748b">build-from-source provenance (doc 02/05)</text>
+
+  <rect x="610" y="688" width="310" height="76" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="624" y="710" font-size="12" font-weight="600" fill="#475569">opencode harness + safety net — Phase 2</text>
+  <text x="624" y="730" font-size="10.5" fill="#64748b">agent mode · capability smoke test</text>
+  <text x="624" y="746" font-size="10.5" fill="#64748b">permission net · git2 snapshot / undo</text>
+
+  <!-- ============ Hardware ============ -->
+  <rect x="20" y="784" width="900" height="70" rx="8" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+  <text x="34" y="808" font-size="13" font-weight="600" fill="#6b21a8">Hardware — Apple Silicon (this machine: M5 Pro / 64 GB)</text>
+  <text x="34" y="826" font-size="10.5" fill="#581c87">probed at launch via sysctl (machdep.cpu.brand_string, hw.memsize) → RAM tier gates the recommendation</text>
+  <text x="34" y="842" font-size="10.5" fill="#581c87">agent mode locked until Phase 2 (tier floor + smoke test, doc 01)</text>
+
+  <!-- probe arrow: common -> hardware (dashed, left margin) -->
+  <polyline points="34,477 12,477 12,784" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <polygon points="12,789 7,780 17,780" fill="#94a3b8"/>
+  <text x="5" y="630" font-size="10" fill="#64748b" transform="rotate(-90 5 630)" text-anchor="middle">sysctl probe</text>
+</svg>
