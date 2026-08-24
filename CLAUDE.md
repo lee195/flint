@@ -6,14 +6,17 @@ Guidance for Claude Code when working in this repository.
 
 **Flint** is a standalone macOS app that gives a non-technical user working local AI with
 zero dev-tool gates: it probes the machine's hardware, recommends **one** model that fits
-(the "cookbook"), installs it on consent, and offers a plain **chat** — all local, no
-cloud, no vendor. Its reason to exist is **vendor resilience** (flint-design doc 00). The
-agent mode (opencode harness + safety net) is Phase 2 — **not in v0**. Design docs live in
-the sibling `../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`05`); the v0 plan
-(`PLAN.md`) is Pre-Phase 0 bootstrap + Phase 0 (probe/cookbook/engine/install) + Phase 1
-(chat).
+(the "cookbook"), installs it on consent, and offers a plain **chat** plus — on capable
+hardware — an **agent mode** — all local, no cloud, no vendor. Its reason to exist is
+**vendor resilience** (flint-design doc 00). Design docs live in the sibling
+`../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`06`); `docs/06-env.md` holds the
+canonical machine/toolchain facts (versions, paths, commands, cert status) so sessions start
+lean.
 
-**Current state: Phase 2.** Everything through the agent is shipped:
+**Current state: Phase 3 (planned).** Phases 0–2 are shipped; 3a (standalone shell) starts
+with the signing/notarization spike — **blocked on a Developer ID cert** (0 identities on
+this machine), so first deliver the unsigned `.dmg` + signing runbook. See
+`../flint-design/PLAN.md` Phase 3. Shipped so far:
 - **Chat** (`/chat`): streamed via `common::engine::chat`, JSONL transcripts in
   `common::chat_store` (`~/.flint/chat/current.jsonl`).
 - **Agent** (`/agent`): a fresh `opencode serve` per run (workspace cwd, isolated config via
@@ -26,10 +29,8 @@ the sibling `../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`05`); 
 - Probe (`common::probe`), cookbook (`common::cookbook`, top tier `qwen3.6:latest`,
   `think:false`), install via `common::engine` (`OllamaBackend`).
 
-Phase 3 (packaging/signing, llama.cpp sidecar swap, bundling opencode) is next.
-
-**v0 engine: Ollama backend first** behind the `EngineBackend` trait (`common/`, Phase 0).
-The llama.cpp sidecar is the Phase 2 swap behind the same interface. All HTTP happens in
+**Engine: Ollama backend first** behind the `EngineBackend` trait (`common/`, Phase 0).
+The llama.cpp swap is Phase 3b behind the same interface. All HTTP happens in
 Rust — the frontend never does HTTP.
 
 ## Overview
