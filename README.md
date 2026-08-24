@@ -43,7 +43,3 @@ cargo test -p common    # shared-crate unit tests
 
 See `CLAUDE.md` for the Tauri bridge pattern, the Deno toolchain rules, and the binding
 WKWebView rules.
-
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
