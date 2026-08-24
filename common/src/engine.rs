@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 
 use crate::error::AppError;
-use crate::types::{EngineHealth, ModelDescriptor, ModelInfo, PullProgress};
+use crate::types::{ChatEvent, ChatMessage, EngineHealth, ModelDescriptor, ModelInfo, PullProgress};
 
 #[async_trait]
 pub trait EngineBackend: Send + Sync {
@@ -30,6 +30,17 @@ pub trait EngineBackend: Send + Sync {
     ) -> Result<(), AppError>;
 
     async fn delete_model(&self, tag: &str) -> Result<(), AppError>;
+
+    /// Stream one chat turn (a no-tools session — the permission net is never involved).
+    /// Emits `ChatEvent::Delta` per token; returns the full assistant reply for
+    /// persistence. Checks `cancel` between chunks.
+    async fn chat(
+        &self,
+        desc: &ModelDescriptor,
+        messages: &[ChatMessage],
+        emit: &mut (dyn FnMut(ChatEvent) + Send),
+        cancel: &AtomicBool,
+    ) -> Result<String, AppError>;
 }
 
 /// v0 backend: Ollama's OpenAI-compatible server on localhost. Bound to 127.0.0.1 only —
@@ -168,6 +179,66 @@ impl EngineBackend for OllamaBackend {
         }
         Ok(())
     }
+
+    async fn chat(
+        &self,
+        desc: &ModelDescriptor,
+        messages: &[ChatMessage],
+        emit: &mut (dyn FnMut(ChatEvent) + Send),
+        cancel: &AtomicBool,
+    ) -> Result<String, AppError> {
+        let url = format!("{}/api/chat", self.base_url);
+        let api_messages: Vec<serde_json::Value> = messages
+            .iter()
+            .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+            .collect();
+        let body = serde_json::json!({
+            "model": desc.tag,
+            "messages": api_messages,
+            "stream": true,
+            "think": desc.think,
+            "options": { "num_ctx": desc.num_ctx }
+        });
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Engine(format!("chat start: {e}")))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(AppError::Engine(format!("chat http {status}: {text}")));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buf: Vec<u8> = Vec::new();
+        let mut full = String::new();
+        while let Some(chunk) = stream.next().await {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(AppError::Engine("chat cancelled".into()));
+            }
+            let chunk = chunk.map_err(|e| AppError::Engine(format!("chat stream: {e}")))?;
+            buf.extend_from_slice(&chunk);
+            while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+                let raw: Vec<u8> = buf.drain(..=pos).collect();
+                let line = String::from_utf8_lossy(&raw[..raw.len().saturating_sub(1)]).trim().to_string();
+                match process_chat_line(&line, emit, &mut full)? {
+                    ChatLine::Done => return Ok(full),
+                    ChatLine::Continue => {}
+                }
+            }
+        }
+        // Flush a trailing partial line (server may not send a final newline).
+        if !buf.is_empty() {
+            let line = String::from_utf8_lossy(&buf).trim().to_string();
+            if !line.is_empty() {
+                process_chat_line(&line, emit, &mut full)?;
+            }
+        }
+        Ok(full)
+    }
 }
 
 /// Outcome of one `/api/pull` NDJSON line.
@@ -205,6 +276,38 @@ fn process_pull_line(
             Ok(PullLine::Continue)
         }
     }
+}
+
+/// Outcome of one `/api/chat` NDJSON line.
+enum ChatLine {
+    Continue,
+    Done,
+}
+
+fn process_chat_line(
+    line: &str,
+    emit: &mut dyn FnMut(ChatEvent),
+    full: &mut String,
+) -> Result<ChatLine, AppError> {
+    if line.is_empty() {
+        return Ok(ChatLine::Continue);
+    }
+    let v: serde_json::Value =
+        serde_json::from_str(line).map_err(|e| AppError::Engine(format!("chat line: {e}")))?;
+    if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
+        return Err(AppError::Engine(err.to_string()));
+    }
+    let done = v.get("done").and_then(|x| x.as_bool()).unwrap_or(false);
+    let delta = v
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    if !delta.is_empty() {
+        full.push_str(delta);
+        emit(ChatEvent::Delta { content: delta.to_string() });
+    }
+    Ok(if done { ChatLine::Done } else { ChatLine::Continue })
 }
 
 #[cfg(test)]
@@ -371,5 +474,116 @@ mod tests {
         let models = backend.list_models().await.expect("tags should resolve");
         assert!(!models.is_empty(), "expected at least one model on disk");
         println!("health: {health:?}\nmodels: {models:?}");
+    }
+
+    fn msg(role: &str, content: &str) -> ChatMessage {
+        ChatMessage { role: role.into(), content: content.into(), ts: 0 }
+    }
+
+    #[tokio::test]
+    async fn chat_streams_deltas_and_returns_full() {
+        let server = MockServer::start();
+        let ndjson = [
+            r#"{"model":"qwen3.6:latest","message":{"role":"assistant","content":"Hel"},"done":false}"#,
+            r#"{"model":"qwen3.6:latest","message":{"role":"assistant","content":"lo"},"done":false}"#,
+            r#"{"model":"qwen3.6:latest","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}"#,
+        ]
+        .join("\n");
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/chat")
+                .json_body_partial(
+                    serde_json::json!({
+                        "model": "qwen3.6:latest",
+                        "think": false,
+                        "options": { "num_ctx": 16384 }
+                    })
+                    .to_string(),
+                );
+            then.status(200)
+                .header("content-type", "application/x-ndjson")
+                .body(ndjson);
+        });
+        let backend = OllamaBackend::new(server.base_url());
+        let mut events: Vec<ChatEvent> = Vec::new();
+        let cancel = AtomicBool::new(false);
+        let history = vec![msg("user", "hi")];
+        let full = backend
+            .chat(&desc("qwen3.6:latest"), &history, &mut |e| events.push(e), &cancel)
+            .await
+            .expect("chat should succeed");
+        assert_eq!(full, "Hello");
+        assert_eq!(
+            events,
+            vec![
+                ChatEvent::Delta { content: "Hel".into() },
+                ChatEvent::Delta { content: "lo".into() },
+            ]
+        );
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn chat_reports_engine_error() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST).path("/api/chat");
+            then.status(200)
+                .header("content-type", "application/x-ndjson")
+                .body(r#"{"error":"model not found"}"#);
+        });
+        let backend = OllamaBackend::new(server.base_url());
+        let cancel = AtomicBool::new(false);
+        let res = backend
+            .chat(&desc("nope:latest"), &[], &mut |_| {}, &cancel)
+            .await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("model not found"));
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn chat_honors_cancel() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST).path("/api/chat");
+            then.status(200)
+                .header("content-type", "application/x-ndjson")
+                .body(r#"{"message":{"role":"assistant","content":"hi"},"done":false}"#);
+        });
+        let backend = OllamaBackend::new(server.base_url());
+        let cancel = AtomicBool::new(true);
+        let res = backend.chat(&desc("qwen3.6:latest"), &[], &mut |_| {}, &cancel).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("cancelled"));
+        mock.assert();
+    }
+
+    /// Dogfood integration smoke — a real streamed reply from the running Ollama
+    /// (`cargo test -p common real_chat -- --ignored --nocapture`).
+    #[tokio::test]
+    #[ignore = "requires local Ollama running on 127.0.0.1:11434 with the recommended model"]
+    async fn real_ollama_chat() {
+        let backend = OllamaBackend::new("http://127.0.0.1:11434".into());
+        let cancel = AtomicBool::new(false);
+        let mut events: Vec<ChatEvent> = Vec::new();
+        let history = vec![msg(
+            "user",
+            "Reply with exactly one word: hello.",
+        )];
+        let reply = backend
+            .chat(&desc("qwen3.6:latest"), &history, &mut |e| events.push(e), &cancel)
+            .await
+            .expect("chat should stream");
+        assert!(!reply.is_empty());
+        let joined: String = events
+            .iter()
+            .filter_map(|e| match e {
+                ChatEvent::Delta { content } => Some(content.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(joined, reply, "deltas must reassemble the full reply");
+        println!("reply: {reply:?}");
     }
 }

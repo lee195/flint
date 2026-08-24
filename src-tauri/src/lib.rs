@@ -1,10 +1,15 @@
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
+use common::chat_store;
 use common::cookbook;
 use common::engine::{EngineBackend, OllamaBackend};
 use common::probe;
-use common::types::{EngineStatusView, InstallState, ProbeResult, PullProgress, Recommendation};
+use common::types::{
+    ChatEvent, ChatHistoryView, ChatMessage, EngineStatusView, InstallState, ProbeResult,
+    PullProgress, Recommendation,
+};
 use common::{config, AppError};
 
 /// The engine, created once in `setup()`. Ollama is the v0 backend behind the
@@ -17,6 +22,18 @@ static INSTALL: OnceLock<Mutex<InstallState>> = OnceLock::new();
 /// Cancellation flag for the in-flight install (checked between pull chunks in `common`).
 static CANCEL: AtomicBool = AtomicBool::new(false);
 
+/// The single active chat: message history + a streamed-event buffer the frontend polls.
+struct ChatState {
+    messages: Vec<ChatMessage>,
+    output: VecDeque<ChatEvent>,
+    streaming: bool,
+}
+
+static CHAT: OnceLock<Mutex<ChatState>> = OnceLock::new();
+
+/// Cancellation flag for the in-flight chat turn (checked between chunks in `common`).
+static CANCEL_CHAT: AtomicBool = AtomicBool::new(false);
+
 fn engine() -> &'static OllamaBackend {
     ENGINE.get().expect("engine not initialized")
 }
@@ -27,6 +44,30 @@ fn install_state() -> MutexGuard<'static, InstallState> {
         .expect("install state not initialized")
         .lock()
         .unwrap_or_else(|e| e.into_inner())
+}
+
+fn chat_state() -> MutexGuard<'static, ChatState> {
+    CHAT
+        .get()
+        .expect("chat state not initialized")
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// The recommended model tag for this machine (chat runs on the recommendation, doc 01).
+fn recommended_model_tag() -> Option<String> {
+    probe::probe()
+        .ok()
+        .and_then(|p| p.tier)
+        .map(cookbook::model_for_tier)
+        .map(|d| d.tag.to_string())
 }
 
 /// Hardware probe (local only — no engine, no network). The honesty screen + tier gate.
@@ -133,6 +174,100 @@ fn launch_ollama() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The chat pane's starting state: persisted history + the model it runs on. Loads the
+/// store on first call in a session (single conversation, doc 04).
+#[tauri::command]
+async fn get_chat() -> Result<ChatHistoryView, AppError> {
+    let model = recommended_model_tag();
+    let mut g = chat_state();
+    if g.messages.is_empty() {
+        g.messages = chat_store::load_messages();
+    }
+    Ok(ChatHistoryView { messages: g.messages.clone(), model })
+}
+
+/// Send a user message and start the streaming reply. Appends + persists the user
+/// message; the assistant reply is streamed into the buffer and persisted on completion.
+#[tauri::command]
+async fn send_chat(message: String) -> Result<(), AppError> {
+    let model = recommended_model_tag()
+        .ok_or_else(|| AppError::Engine("no model for this machine".into()))?;
+    let desc = cookbook::find_by_tag(&model)
+        .ok_or_else(|| AppError::Engine(format!("unknown model: {model}")))?;
+    let user_msg = ChatMessage { role: "user".into(), content: message, ts: now_ms() };
+    {
+        let mut g = chat_state();
+        if g.streaming {
+            return Err(AppError::Engine("a reply is already streaming — wait or cancel".into()));
+        }
+        g.messages.push(user_msg.clone());
+        g.streaming = true;
+    }
+    chat_store::append_message(&user_msg);
+    CANCEL_CHAT.store(false, Ordering::Relaxed);
+    let desc = desc.clone();
+    tauri::async_runtime::spawn(async move {
+        // Clone the history so the request doesn't hold the lock for the whole stream
+        // (the emit callback needs it per-event).
+        let history = chat_state().messages.clone();
+        let result = {
+            let mut emit = |e: ChatEvent| {
+                if !CANCEL_CHAT.load(Ordering::Relaxed) {
+                    chat_state().output.push_back(e);
+                }
+            };
+            engine().chat(&desc, &history, &mut emit, &CANCEL_CHAT).await
+        };
+        let mut g = chat_state();
+        g.streaming = false;
+        match (CANCEL_CHAT.load(Ordering::Relaxed), result) {
+            (_, Err(e)) => {
+                g.output.push_back(ChatEvent::Error { message: e.to_string() });
+            }
+            (_, Ok(reply)) => {
+                // Keep the partial on cancel too — honest: the user watched it stop.
+                if !reply.is_empty() {
+                    let m = ChatMessage { role: "assistant".into(), content: reply.clone(), ts: now_ms() };
+                    g.messages.push(m.clone());
+                    chat_store::append_message(&m);
+                }
+                g.output.push_back(ChatEvent::Done { full: reply });
+            }
+        }
+    });
+    Ok(())
+}
+
+/// Drained by the frontend poll (~150 ms) while streaming.
+#[tauri::command]
+async fn poll_chat_output() -> Result<Vec<ChatEvent>, AppError> {
+    let mut g = chat_state();
+    let mut out = Vec::new();
+    while let Some(e) = g.output.pop_front() {
+        out.push(e);
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+async fn cancel_chat() -> Result<(), AppError> {
+    CANCEL_CHAT.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
+/// Clear the conversation (New chat) — truncates `current.jsonl`.
+#[tauri::command]
+async fn new_chat() -> Result<(), AppError> {
+    let mut g = chat_state();
+    if g.streaming {
+        return Err(AppError::Engine("wait for the current reply before starting a new chat".into()));
+    }
+    g.messages.clear();
+    g.output.clear();
+    chat_store::clear_conversation();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -144,6 +279,13 @@ pub fn run() {
             INSTALL
                 .set(Mutex::new(InstallState::Idle))
                 .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("install state already initialized")))?;
+            CHAT
+                .set(Mutex::new(ChatState {
+                    messages: vec![],
+                    output: VecDeque::new(),
+                    streaming: false,
+                }))
+                .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("chat state already initialized")))?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -155,6 +297,11 @@ pub fn run() {
             cancel_install,
             delete_model,
             launch_ollama,
+            get_chat,
+            send_chat,
+            poll_chat_output,
+            cancel_chat,
+            new_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

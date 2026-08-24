@@ -62,3 +62,19 @@ export type InstallState =
   | { state: "Done"; model: string }
   | { state: "Failed"; model: string; error: string }
   | { state: "Cancelled"; model: string };
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  ts: number;
+}
+
+export type ChatEvent =
+  | { kind: "Delta"; content: string }
+  | { kind: "Done"; full: string }
+  | { kind: "Error"; message: string };
+
+export interface ChatHistoryView {
+  messages: ChatMessage[];
+  model: string | null;
+}

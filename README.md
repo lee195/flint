@@ -7,9 +7,10 @@ cloud, no vendor. Its reason to exist is **vendor resilience** (a single-point-o
 hedge must be independent of any vendor's cloud). Design docs: `../flint-design/`
 (`STATE.md` → `PLAN.md` → `docs/00`–`05`).
 
-**Status: v0 (Phase 0 + 1)** — Phase 0 (probe + cookbook + engine interface + install) is
-shipped: the app probes the hardware, recommends one model for the tier, and installs it on
-consent. **Chat is Phase 1 (next)**. Agent mode (opencode harness + safety net) is Phase 2.
+**Status: v0 (Phase 0 + 1)** — Phase 0 (probe + cookbook + engine interface + install) and
+**Phase 1 (chat)** are shipped: the app probes the hardware, recommends one model for the
+tier, installs it on consent, and chats with it — streamed, with conversations persisted
+under `~/.flint/chat/`. Agent mode (opencode harness + safety net) is Phase 2.
 
 ## Architecture
 

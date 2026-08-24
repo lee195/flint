@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ChatEvent,
+  ChatHistoryView,
   EngineStatusView,
   InstallState,
   ProbeResult,
@@ -50,4 +52,27 @@ export async function deleteModel(tag: string): Promise<void> {
 /** Launch Ollama.app (`/usr/bin/open` — absolute path, doc 05). */
 export async function launchOllama(): Promise<void> {
   return invoke<void>("launch_ollama");
+}
+
+/** Chat history + the model it runs on (loads the persisted conversation). */
+export async function getChat(): Promise<ChatHistoryView> {
+  return invoke<ChatHistoryView>("get_chat");
+}
+
+/** Send a user message and start the streaming reply. */
+export async function sendChat(message: string): Promise<void> {
+  return invoke<void>("send_chat", { message });
+}
+
+/** Drain buffered streamed events (poll ~150ms while streaming). */
+export async function pollChatOutput(): Promise<ChatEvent[]> {
+  return invoke<ChatEvent[]>("poll_chat_output");
+}
+
+export async function cancelChat(): Promise<void> {
+  return invoke<void>("cancel_chat");
+}
+
+export async function newChat(): Promise<void> {
+  return invoke<void>("new_chat");
 }

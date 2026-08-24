@@ -13,11 +13,12 @@ the sibling `../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`05`); 
 (`PLAN.md`) is Pre-Phase 0 bootstrap + Phase 0 (probe/cookbook/engine/install) + Phase 1
 (chat).
 
-**Current state: Phase 0.** The app probes the machine (`common::probe`, sysctl), shows the
+**Current state: Phase 1.** The app probes the machine (`common::probe`, sysctl), shows the
 honesty screen, recommends **one** model for the tier (`common::cookbook` — top tier is
-`qwen3.6:latest` with `think:false`, resolved 2026-08-24), and installs it on consent via
-`common::engine` (`OllamaBackend`, polled progress). Chat is Phase 1 (next). Agent mode
-(opencode harness + safety net) is Phase 2.
+`qwen3.6:latest` with `think:false`, resolved 2026-08-24), installs it on consent via
+`common::engine` (`OllamaBackend`, polled progress), and chats with it (`/chat` view,
+streamed via `common::engine::chat`, JSONL transcripts in `common::chat_store` under
+`~/.flint/chat/current.jsonl`). Agent mode (opencode harness + safety net) is Phase 2.
 
 **v0 engine: Ollama backend first** behind the `EngineBackend` trait (`common/`, Phase 0).
 The llama.cpp sidecar is the Phase 2 swap behind the same interface. All HTTP happens in
@@ -29,7 +30,8 @@ Rust — the frontend never does HTTP.
 
 - `common/` — shared, no-Tauri library: the canonical data-dir owner (`common::config`),
   error type, hardware probe (`common::probe`), cookbook tier table (`common::cookbook`),
-  and the engine backend trait + `OllamaBackend` impl (`common::engine`).
+  engine backend trait + `OllamaBackend` impl (`common::engine`), and chat transcript
+  persistence (`common::chat_store`).
 - `src-tauri/` — the Tauri 2 app backend: commands + plugins.
 - `src/` — Vue 3 + TypeScript + Vite frontend. JS toolchain is **Deno** (not Bun/npm
   scripts): deps in `package.json` (installed with `deno install`), tasks in `deno.json`.
@@ -98,8 +100,9 @@ webview. Do not switch to HTML history mode. Views are lazy-loaded.
 
 Backend → frontend state flows via **polling**, never Tauri events. The primitive is
 `src/composables/use-polling.ts` (5s cadence, spark doc 02). Chat streaming polls its
-buffered run-loop at ~150ms (skills-manager's `poll_skill_output` copy source), not the
-5s composable.
+buffered run-loop at ~150ms (skills-manager's `poll_skill_output` copy source): the backend
+buffers `ChatEvent`s in `ChatState.output` and `poll_chat_output` drains them; the assistant
+reply is persisted (JSONL) by the backend on completion.
 
 ### i18n
 

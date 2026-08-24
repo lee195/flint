@@ -18,6 +18,13 @@ const { t } = useI18n();
             {{ t("nav.home") }}
           </RouterLink>
           <RouterLink
+            to="/chat"
+            class="text-muted-foreground hover:text-foreground"
+            active-class="text-foreground font-medium"
+          >
+            {{ t("nav.chat") }}
+          </RouterLink>
+          <RouterLink
             to="/settings"
             class="text-muted-foreground hover:text-foreground"
             active-class="text-foreground font-medium"

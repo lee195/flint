@@ -11,6 +11,7 @@ const messages = {
     },
     nav: {
       home: "Start",
+      chat: "Chat",
       settings: "Settings",
     },
     home: {
@@ -49,7 +50,8 @@ const messages = {
       },
       ready: {
         title: "You're ready",
-        body: "{model} is installed and runs on this Mac. Chat arrives in Phase 1.",
+        body: "{model} is installed and runs on this Mac — offline and private.",
+        openChat: "Open chat",
       },
       failed: {
         title: "Something went wrong",
@@ -84,6 +86,21 @@ const messages = {
         confirmNo: "Keep",
       },
       error: "Something went wrong loading settings.",
+    },
+    chat: {
+      title: "Chat",
+      runsOnDevice: "runs on this device",
+      placeholder: "Ask your model…",
+      send: "Send",
+      stop: "Stop",
+      newChat: "New chat",
+      confirmNew: "Start a new chat? The current conversation will be cleared.",
+      confirmYes: "Start new",
+      confirmNo: "Keep",
+      engineDown: "The engine isn't running — replies need it.",
+      launch: "Launch Ollama",
+      error: "Something went wrong.",
+      empty: "Ask anything — it runs on this Mac.",
     },
     common: {
       retry: "Try again",

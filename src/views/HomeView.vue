@@ -217,6 +217,12 @@ function formatSize(gb: number): string {
       <p class="mt-1 text-sm text-muted-foreground">
         {{ t("home.ready.body", { model: rec.model.tag }) }}
       </p>
+      <RouterLink
+        to="/chat"
+        class="mt-4 inline-block rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
+      >
+        {{ t("home.ready.openChat") }}
+      </RouterLink>
     </div>
 
     <div v-else-if="step.kind === 'failed'" class="mt-6 rounded-lg border border-border bg-accent p-4">

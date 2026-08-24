@@ -143,3 +143,35 @@ pub enum InstallState {
         model: String,
     },
 }
+
+/// One chat message. Single-word fields (`role`/`content`/`ts`) — no camelCase/snake_case
+/// footgun between the IPC surface and the stored JSONL payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+    pub ts: i64,
+}
+
+/// A streamed chat event, buffered backend-side and drained by the frontend poll.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ChatEvent {
+    Delta {
+        content: String,
+    },
+    Done {
+        full: String,
+    },
+    Error {
+        message: String,
+    },
+}
+
+/// The chat pane's starting state: persisted history + the model it runs on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatHistoryView {
+    pub messages: Vec<ChatMessage>,
+    pub model: Option<String>,
+}
