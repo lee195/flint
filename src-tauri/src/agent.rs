@@ -182,6 +182,13 @@ async fn run_driver(
     prompt: String,
     cancel: Arc<AtomicBool>,
 ) -> Result<(), AppError> {
+    // The engine (llama-server) must be up before opencode starts — it targets the
+    // engine's OpenAI-compatible endpoint (Phase 3b full swap).
+    if let Err(e) = crate::engine_mgr().ensure_running(&desc).await {
+        state().output.push_back(AgentEvent::Error { message: e.to_string() });
+        finish(None);
+        return Err(e);
+    }
     let (base_url, child) = match spawn_server(&workspace, &desc).await {
         Ok(v) => v,
         Err(e) => {
@@ -255,7 +262,7 @@ async fn spawn_server(
     }
     let port = agentcfg::pick_free_port()?;
     let config_dir = common::config::data_dir().join("opencode");
-    let content = agentcfg::config_content(desc);
+    let content = agentcfg::config_content(desc, &crate::engine_mgr().openai_base_url());
     let mut child = tokio::process::Command::new(&bin)
         .arg("serve")
         .arg("--port")
@@ -298,6 +305,8 @@ async fn spawn_server(
 /// the file effect. Persists the result (the agent gate).
 pub async fn run_smoke_test() -> Result<SmokeResult, AppError> {
     let desc = recommended_desc()?;
+    // The smoke scores tool-calling on the real engine — bring it up first (3b swap).
+    crate::engine_mgr().ensure_running(&desc).await?;
     let tmp = std::env::temp_dir().join(format!("flint-smoke-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).map_err(|e| AppError::Io { path: tmp.clone(), source: e })?;
@@ -308,7 +317,7 @@ pub async fn run_smoke_test() -> Result<SmokeResult, AppError> {
     }
     let port = agentcfg::pick_free_port()?;
     let config_dir = common::config::data_dir().join("opencode");
-    let content = config_content_permissive(&desc);
+    let content = config_content_permissive(&desc, &crate::engine_mgr().openai_base_url());
     let mut child = tokio::process::Command::new(&bin)
         .arg("serve")
         .arg("--port")

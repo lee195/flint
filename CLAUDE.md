@@ -13,10 +13,21 @@ hardware — an **agent mode** — all local, no cloud, no vendor. Its reason to
 canonical machine/toolchain facts (versions, paths, commands, cert status) so sessions start
 lean.
 
-**Current state: Phase 3 (planned).** Phases 0–2 are shipped; 3a (standalone shell) starts
-with the signing/notarization spike — **blocked on a Developer ID cert** (0 identities on
-this machine), so first deliver the unsigned `.dmg` + signing runbook. See
-`../flint-design/PLAN.md` Phase 3. Shipped so far:
+**Current state: Phase 3b (standalone engine) — M1–M5 headless done, UI dogfood pending.**
+Phases 0–2 shipped; 3a (signing/bundling) is paused (cert blocked). 3b swaps the engine to
+a **bundled `llama-server`** (llama.cpp) with self-downloaded GGUF models — **no Ollama**:
+- `common::downloader` — pure-Rust resumable (HTTP Range) + sha256-verified GGUF download.
+- `common::engine::LlamaCppBackend` — the active `EngineBackend` (health/store/chat over
+  OpenAI-compat SSE); Ollama's impl remains as a dev fallback only.
+- `src-tauri/src/engine_mgr.rs` — owns the sidecar: spawns `llama-server` with the installed
+  model (`deno task fetch-llama-server` vendors it to `~/.flint/bin/`), kills on quit.
+- Agent mode targets the engine's OpenAI-compat URL (`config_content(desc, base_url)`).
+- Cookbook rows carry `hf_repo`/`hf_file`/`sha256` (bartowski Q4_K_M, top tier
+  Qwen3.5-35B-A3B). Commands: `start_engine` replaced `launch_ollama`.
+- **M1 tool-calling gate passed** (opencode → llama-server → Qwen3.5-35B-A3B wrote
+  `result.txt`; 78 s). **M5 headless pass** with Ollama stopped: `engine_mgr::ensure_running`
+  brings the engine up (~4 s), sidecar killed on quit. Remaining: author UI dogfood.
+
 - **Chat** (`/chat`): streamed via `common::engine::chat`, JSONL transcripts in
   `common::chat_store` (`~/.flint/chat/current.jsonl`).
 - **Agent** (`/agent`): a fresh `opencode serve` per run (workspace cwd, isolated config via
@@ -29,9 +40,9 @@ this machine), so first deliver the unsigned `.dmg` + signing runbook. See
 - Probe (`common::probe`), cookbook (`common::cookbook`, top tier `qwen3.6:latest`,
   `think:false`), install via `common::engine` (`OllamaBackend`).
 
-**Engine: Ollama backend first** behind the `EngineBackend` trait (`common/`, Phase 0).
-The llama.cpp swap is Phase 3b behind the same interface. All HTTP happens in
-Rust — the frontend never does HTTP.
+**Engine: `LlamaCppBackend` (llama.cpp) is the active engine** behind the `EngineBackend`
+trait (`common/`, Phase 3b full swap); `OllamaBackend` remains as a dev fallback only.
+All HTTP happens in Rust — the frontend never does HTTP.
 
 ## Overview
 
@@ -39,11 +50,13 @@ Rust — the frontend never does HTTP.
 
 - `common/` — shared, no-Tauri library: the canonical data-dir owner (`common::config`),
   error type, hardware probe (`common::probe`), cookbook tier table (`common::cookbook`),
-  engine backend trait + `OllamaBackend` impl (`common::engine`), chat transcript
-  persistence (`common::chat_store`), the opencode client + isolated-config builder
+  engine backend trait + `OllamaBackend` + `LlamaCppBackend` impls (`common::engine`), the
+  GGUF downloader (`common::downloader`), chat transcript persistence
+  (`common::chat_store`), the opencode client + isolated-config builder
   (`common::agent`), the capability smoke record (`common::smoke`), and the git2 snapshot
   (`common::snapshot`).
-- `src-tauri/` — the Tauri 2 app backend: commands + plugins.
+- `src-tauri/` — the Tauri 2 app backend: commands + plugins, plus `engine_mgr.rs`
+  (the llama-server sidecar lifecycle) and `agent.rs` (the opencode harness).
 - `src/` — Vue 3 + TypeScript + Vite frontend. JS toolchain is **Deno** (not Bun/npm
   scripts): deps in `package.json` (installed with `deno install`), tasks in `deno.json`.
 
@@ -55,7 +68,9 @@ toolchain reference (pattern only — its `deno desktop` shell is not used; Taur
 
 **Data dir:** `~/.flint/`, owned by `common::config::data_dir()` — resolved by that one
 function only, never Tauri's `app_data_dir()` (a path split silently breaks shared state).
-On first launch the app ensures the dir exists.
+On first launch the app ensures the dir exists. Subdirs: `models/` (GGUF store, 3b),
+`bin/` (llama-server dev vendor), `opencode/` (agent config dir), `snapshots/` (git2 repos),
+`chat/` (JSONL transcripts).
 
 ## Commands
 
@@ -67,6 +82,8 @@ On first launch the app ensures the dir exists.
 - `deno task check` — type-check only.
 - `deno task tauri build` — produce a distributable native binary/installer (unsigned →
   ad-hoc until the Developer ID cert lands; the signed+notarized path is `docs/signing-runbook.md`).
+- `deno task fetch-llama-server` — vendor the pinned llama.cpp release (sha256-verified) to
+  `~/.flint/bin/llama-server` (the app spawns it from there in dev; release bundles it).
 - `cargo build --workspace` / `cargo test -p common` — Rust workspace build/tests.
 
 The Vite dev server is locked to port **1420** (`strictPort: true`) because Tauri expects

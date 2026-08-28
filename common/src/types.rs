@@ -61,6 +61,10 @@ pub struct ModelDescriptor {
     pub size_gb: f64,
     pub license: &'static str,
     pub source: &'static str,
+    /// Hugging Face GGUF artifact for the llama.cpp engine (Phase 3b) — pinned by digest.
+    pub hf_repo: &'static str,
+    pub hf_file: &'static str,
+    pub sha256: &'static str,
     pub num_ctx: u32,
     /// `think:false` — Qwen3's chain-of-thought dominates latency; off by default for a
     /// no-parameters chat pane (measured: 357 ms vs 14.8 s on this machine).

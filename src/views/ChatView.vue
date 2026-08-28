@@ -5,10 +5,10 @@ import {
   cancelChat,
   engineStatus,
   getChat,
-  launchOllama,
   newChat,
   pollChatOutput,
   sendChat,
+  startEngine,
 } from "@/lib/tauri-commands";
 import type { ChatMessage, EngineStatusView } from "@/lib/types";
 
@@ -132,7 +132,7 @@ async function doNewChat() {
 
 async function doLaunch() {
   try {
-    await launchOllama();
+    await startEngine();
     await new Promise((r) => setTimeout(r, 1500));
     await refreshEngine();
   } catch (e) {

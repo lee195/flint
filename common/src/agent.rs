@@ -14,8 +14,9 @@ use crate::types::ModelDescriptor;
 
 /// The isolated config passed via OPENCODE_CONFIG_CONTENT. Inline config is loaded AFTER
 /// a project `opencode.json`, so a workspace config cannot silently weaken the net.
-/// The recommended model is forced here AND per-session.
-pub fn config_content(desc: &ModelDescriptor) -> String {
+/// The recommended model is forced here AND per-session. `openai_base_url` is the active
+/// engine's OpenAI-compatible endpoint (llama.cpp in 3b; Ollama in dev fallback).
+pub fn config_content(desc: &ModelDescriptor, openai_base_url: &str) -> String {
     serde_json::json!({
         "model": format!("ollama/{}", desc.tag),
         "permission": {
@@ -27,7 +28,7 @@ pub fn config_content(desc: &ModelDescriptor) -> String {
             "ollama": {
                 "npm": "@ai-sdk/openai-compatible",
                 "name": "Ollama (local)",
-                "options": { "baseURL": "http://127.0.0.1:11434/v1", "apiKey": "none" },
+                "options": { "baseURL": openai_base_url, "apiKey": "none" },
                 "models": { desc.tag: { "name": desc.tag } }
             }
         }
@@ -37,7 +38,7 @@ pub fn config_content(desc: &ModelDescriptor) -> String {
 
 /// Permissive config for the unattended capability smoke test (scores tool-calling
 /// validity, not the permission net — the net is exercised by real runs + dogfood).
-pub fn config_content_permissive(desc: &ModelDescriptor) -> String {
+pub fn config_content_permissive(desc: &ModelDescriptor, openai_base_url: &str) -> String {
     serde_json::json!({
         "model": format!("ollama/{}", desc.tag),
         "permission": { "*": "allow" },
@@ -45,7 +46,7 @@ pub fn config_content_permissive(desc: &ModelDescriptor) -> String {
             "ollama": {
                 "npm": "@ai-sdk/openai-compatible",
                 "name": "Ollama (local)",
-                "options": { "baseURL": "http://127.0.0.1:11434/v1", "apiKey": "none" },
+                "options": { "baseURL": openai_base_url, "apiKey": "none" },
                 "models": { desc.tag: { "name": desc.tag } }
             }
         }
@@ -451,11 +452,14 @@ mod tests {
             size_gb: 22.3,
             license: "Apache-2.0",
             source: "https://ollama.com/library/qwen3.6",
+            hf_repo: "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+            hf_file: "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+            sha256: "2f2df1e8b2e92b642c1850ea1734b341cc8ca5098c42cc0a8b8c436a8d4751ab",
             num_ctx: 16384,
             think: false,
             agent: crate::types::AgentCapability::Locked,
         };
-        let cfg: Value = serde_json::from_str(&config_content(&desc)).unwrap();
+        let cfg: Value = serde_json::from_str(&config_content(&desc, "http://127.0.0.1:11434/v1")).unwrap();
         assert_eq!(cfg["permission"]["*"], "ask");
         assert_eq!(cfg["permission"]["bash"]["*"], "ask");
         assert_eq!(cfg["permission"]["read"]["**/.env"], "deny");
@@ -567,6 +571,9 @@ mod tests {
             size_gb: 22.3,
             license: "Apache-2.0",
             source: "https://ollama.com/library/qwen3.6",
+            hf_repo: "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+            hf_file: "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+            sha256: "2f2df1e8b2e92b642c1850ea1734b341cc8ca5098c42cc0a8b8c436a8d4751ab",
             num_ctx: 16384,
             think: false,
             agent: crate::types::AgentCapability::Locked,
@@ -603,19 +610,24 @@ mod tests {
     }
 
     /// Real-stack integration smoke: spawn the installed opencode serve against the running
-    /// Ollama and verify an agentic write round-trip (`cargo test -p common real_agent --
-    /// --ignored --nocapture`). Requires opencode + Ollama on this machine.
+    /// Verify an agentic write round-trip against the running engine's OpenAI-compatible
+    /// endpoint (`cargo test -p common real_opencode_smoke -- --ignored --nocapture`).
+    /// Requires opencode + a running engine on this machine. The base URL defaults to
+    /// Ollama (11434) and can be overridden with OPENCODE_BASE_URL (e.g. a llama-server
+    /// port) — Phase 3b gate.
     #[tokio::test]
-    #[ignore = "requires local opencode + Ollama"]
+    #[ignore = "requires local opencode + a running engine"]
     async fn real_opencode_smoke() {
         use std::path::Path;
+        let openai_base = std::env::var("OPENCODE_BASE_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:11434/v1".into());
         let bin = resolve_opencode_path();
         assert!(bin.exists(), "opencode binary missing: {}", bin.display());
         let tmp = std::env::temp_dir().join(format!("flint-agent-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let port = pick_free_port().unwrap();
-        let cfg = config_content_permissive(&desc());
+        let cfg = config_content_permissive(&desc(), &openai_base);
         let mut child = tokio::process::Command::new(&bin)
             .arg("serve").arg("--port").arg(port.to_string()).arg("--hostname").arg("127.0.0.1")
             .env("OPENCODE_CONFIG_CONTENT", cfg)

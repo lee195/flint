@@ -21,6 +21,9 @@ export interface ModelDescriptor {
   sizeGb: number;
   license: string;
   source: string;
+  hfRepo: string;
+  hfFile: string;
+  sha256: string;
   numCtx: number;
   think: boolean;
   agent: "locked";

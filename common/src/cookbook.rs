@@ -10,7 +10,8 @@ pub const COOKBOOK_AS_OF: &str = "2026-08";
 
 /// Build-time pinned table — exactly one entry per tier, in tier order (8 → 64 GB).
 /// Top tier measured on this machine (2026-08-24); lower tiers pinned-but-untested until
-/// real hardware appears (doc 01's maintenance stance).
+/// real hardware appears (doc 01's maintenance stance). HF refs (3b) pinned by sha256
+/// (bartowski Q4_K_M conversions); sizes match the Ollama builds' file sizes.
 const TABLE: &[ModelDescriptor] = &[
     ModelDescriptor {
         tag: "qwen3:4b",
@@ -18,6 +19,9 @@ const TABLE: &[ModelDescriptor] = &[
         size_gb: 2.9,
         license: "Apache-2.0",
         source: "https://ollama.com/library/qwen3",
+        hf_repo: "bartowski/Qwen_Qwen3-4B-GGUF",
+        hf_file: "Qwen_Qwen3-4B-Q4_K_M.gguf",
+        sha256: "fbe1d5edd4ce802ae3ae7c7e4ab7d09789d697fdac1fc7929f8df4ca3c41bae3",
         num_ctx: 8192,
         think: false,
         agent: AgentCapability::Locked,
@@ -28,6 +32,9 @@ const TABLE: &[ModelDescriptor] = &[
         size_gb: 5.2,
         license: "Apache-2.0",
         source: "https://ollama.com/library/qwen3",
+        hf_repo: "bartowski/Qwen_Qwen3-8B-GGUF",
+        hf_file: "Qwen_Qwen3-8B-Q4_K_M.gguf",
+        sha256: "54fffa050078e984116639c83dfb64b5aa6d4cd474e018b076777c632bbccccd",
         num_ctx: 8192,
         think: false,
         agent: AgentCapability::Locked,
@@ -38,6 +45,9 @@ const TABLE: &[ModelDescriptor] = &[
         size_gb: 9.0,
         license: "Apache-2.0",
         source: "https://ollama.com/library/qwen3",
+        hf_repo: "bartowski/Qwen_Qwen3-14B-GGUF",
+        hf_file: "Qwen_Qwen3-14B-Q4_K_M.gguf",
+        sha256: "915913e22399475dbe6c968ac014d9f1fbe08975e489279aede9d5c7b2c98eb6",
         num_ctx: 16384,
         think: false,
         agent: AgentCapability::Locked,
@@ -48,6 +58,9 @@ const TABLE: &[ModelDescriptor] = &[
         size_gb: 22.3,
         license: "Apache-2.0",
         source: "https://ollama.com/library/qwen3.6",
+        hf_repo: "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+        hf_file: "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+        sha256: "2f2df1e8b2e92b642c1850ea1734b341cc8ca5098c42cc0a8b8c436a8d4751ab",
         num_ctx: 16384,
         think: false,
         agent: AgentCapability::Locked,
@@ -68,16 +81,24 @@ pub fn find_by_tag(tag: &str) -> Option<&'static ModelDescriptor> {
     TABLE.iter().find(|d| d.tag == tag)
 }
 
+/// Look up a row by its GGUF file name (what the model store lists, Phase 3b).
+pub fn find_by_hf_file(file: &str) -> Option<&'static ModelDescriptor> {
+    TABLE.iter().find(|d| d.hf_file == file)
+}
+
 /// Full recommendation for the probe, with `already_installed` resolved against the
-/// engine's current model list.
+/// engine's current model list (matched by Ollama tag or, in 3b, the GGUF file name).
 pub fn recommendation(probe: &ProbeResult, installed_tags: &[String]) -> Option<Recommendation> {
     let tier = probe.tier?;
     let model = model_for_tier(tier);
+    let already = installed_tags
+        .iter()
+        .any(|t| t == &model.tag || t == &model.hf_file);
     Some(Recommendation {
         probe: probe.clone(),
         model: Some(model.clone()),
         as_of: COOKBOOK_AS_OF,
-        already_installed: installed_tags.iter().any(|t| t == &model.tag),
+        already_installed: already,
     })
 }
 

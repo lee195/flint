@@ -1,12 +1,13 @@
 mod agent;
+mod engine_mgr;
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use common::chat_store;
 use common::cookbook;
-use common::engine::{EngineBackend, OllamaBackend};
+use common::engine::EngineBackend;
 use common::probe;
 use common::types::{
     AgentEvent, AgentStatusView, ChatEvent, ChatHistoryView, ChatMessage, EngineStatusView,
@@ -14,14 +15,14 @@ use common::types::{
 };
 use common::{config, AppError};
 
-/// The engine, created once in `setup()`. Ollama is the v0 backend behind the
-/// `EngineBackend` trait (llama.cpp becomes a second impl in Phase 2).
-static ENGINE: OnceLock<OllamaBackend> = OnceLock::new();
+/// The engine manager, created once in `setup()`. Phase 3b full swap: it owns the
+/// llama-server sidecar and the `EngineBackend` (Ollama is the dev fallback only).
+static ENGINE_MGR: OnceLock<Arc<engine_mgr::EngineManager>> = OnceLock::new();
 
-/// Shared install lifecycle: the background pull task writes it, the frontend polls it.
+/// Shared install lifecycle: the background download task writes it, the frontend polls it.
 static INSTALL: OnceLock<Mutex<InstallState>> = OnceLock::new();
 
-/// Cancellation flag for the in-flight install (checked between pull chunks in `common`).
+/// Cancellation flag for the in-flight install (checked between chunks in `common`).
 static CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// The single active chat: message history + a streamed-event buffer the frontend polls.
@@ -36,8 +37,12 @@ static CHAT: OnceLock<Mutex<ChatState>> = OnceLock::new();
 /// Cancellation flag for the in-flight chat turn (checked between chunks in `common`).
 static CANCEL_CHAT: AtomicBool = AtomicBool::new(false);
 
-fn engine() -> &'static OllamaBackend {
-    ENGINE.get().expect("engine not initialized")
+fn engine_mgr() -> &'static engine_mgr::EngineManager {
+    ENGINE_MGR.get().expect("engine manager not initialized")
+}
+
+fn engine() -> &'static dyn EngineBackend {
+    engine_mgr().backend.as_ref()
 }
 
 fn install_state() -> MutexGuard<'static, InstallState> {
@@ -72,6 +77,15 @@ fn recommended_model_tag() -> Option<String> {
         .map(|d| d.tag.to_string())
 }
 
+/// The recommended model descriptor for this machine.
+fn recommended_desc() -> Result<common::types::ModelDescriptor, AppError> {
+    let tag = recommended_model_tag()
+        .ok_or_else(|| AppError::Engine("no model for this machine".into()))?;
+    cookbook::find_by_tag(&tag)
+        .cloned()
+        .ok_or_else(|| AppError::Engine(format!("unknown model: {tag}")))
+}
+
 /// Hardware probe (local only — no engine, no network). The honesty screen + tier gate.
 #[tauri::command]
 fn probe_machine() -> Result<ProbeResult, AppError> {
@@ -101,7 +115,7 @@ async fn engine_status() -> Result<EngineStatusView, AppError> {
         .ok()
         .and_then(|p| p.tier)
         .map(cookbook::model_for_tier)
-        .is_some_and(|d| models.iter().any(|m| m.name == d.tag));
+        .is_some_and(|d| models.iter().any(|m| m.name == d.hf_file));
     Ok(EngineStatusView {
         health,
         models,
@@ -109,8 +123,9 @@ async fn engine_status() -> Result<EngineStatusView, AppError> {
     })
 }
 
-/// Consent-gated install (doc 01/02): kicks off the pull in the background; progress is
-/// polled via `get_install_progress`. Resumable by Ollama; cancelled installs abort early.
+/// Consent-gated install (doc 01/02): kicks off the download in the background; progress is
+/// polled via `get_install_progress`. Resumable (HTTP Range) + sha256-verified; cancelled
+/// installs abort early. On success the engine is started with the new model.
 #[tauri::command]
 async fn start_install(model: String) -> Result<(), AppError> {
     let desc = cookbook::find_by_tag(&model)
@@ -130,6 +145,11 @@ async fn start_install(model: String) -> Result<(), AppError> {
             };
             engine().ensure_model(&desc, &mut update, &CANCEL).await
         };
+        // Model on disk → bring the engine up with it (a failure here still counts as
+        // installed; the status pill shows amber + Start engine).
+        if outcome.is_ok() {
+            let _ = engine_mgr().ensure_running(&desc).await;
+        }
         let cancelled = CANCEL.load(Ordering::Relaxed);
         *install_state() = match (cancelled, outcome) {
             (true, _) => InstallState::Cancelled { model },
@@ -153,27 +173,20 @@ async fn cancel_install() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Remove a model from the engine's store (settings delete affordance).
+/// Remove a model from the engine's store (settings delete affordance). Stops the
+/// sidecar first — the next start re-spawns with whatever model remains.
 #[tauri::command]
 async fn delete_model(tag: String) -> Result<(), AppError> {
-    engine().delete_model(&tag).await
+    let res = engine().delete_model(&tag).await;
+    engine_mgr().stop();
+    res
 }
 
-/// Launch Ollama.app. `/usr/bin/open` is on the minimal launchd PATH (doc 05's
-/// absolute-paths rule — no PATH lookups anywhere).
+/// Start the bundled engine (llama-server) with the recommended model, if installed.
 #[tauri::command]
-fn launch_ollama() -> Result<(), AppError> {
-    let status = std::process::Command::new("/usr/bin/open")
-        .arg("-a")
-        .arg("Ollama")
-        .status()
-        .map_err(|e| AppError::Engine(format!("launch Ollama: {e}")))?;
-    if !status.success() {
-        return Err(AppError::Engine(
-            "couldn't open Ollama — is Ollama.app installed? (Phase 2 bundles llama.cpp instead)".into(),
-        ));
-    }
-    Ok(())
+async fn start_engine() -> Result<(), AppError> {
+    let desc = recommended_desc()?;
+    engine_mgr().ensure_running(&desc).await
 }
 
 /// The chat pane's starting state: persisted history + the model it runs on. Loads the
@@ -218,7 +231,11 @@ async fn send_chat(message: String) -> Result<(), AppError> {
                     chat_state().output.push_back(e);
                 }
             };
-            engine().chat(&desc, &history, &mut emit, &CANCEL_CHAT).await
+            if let Err(e) = engine_mgr().ensure_running(&desc).await {
+                Err(e)
+            } else {
+                engine().chat(&desc, &history, &mut emit, &CANCEL_CHAT).await
+            }
         };
         let mut g = chat_state();
         g.streaming = false;
@@ -321,15 +338,16 @@ fn restore_snapshot() -> Result<(), AppError> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
             let _ = std::fs::create_dir_all(config::data_dir());
+            let _ = std::fs::create_dir_all(config::models_dir());
             agent::init().map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e)))?;
             let _ = agent::ensure_confinement_plugin();
-            ENGINE
-                .set(OllamaBackend::new("http://127.0.0.1:11434".to_string()))
-                .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("engine already initialized")))?;
+            ENGINE_MGR
+                .set(engine_mgr::EngineManager::new()?)
+                .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("engine manager already initialized")))?;
             INSTALL
                 .set(Mutex::new(InstallState::Idle))
                 .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("install state already initialized")))?;
@@ -350,7 +368,7 @@ pub fn run() {
             get_install_progress,
             cancel_install,
             delete_model,
-            launch_ollama,
+            start_engine,
             get_chat,
             send_chat,
             poll_chat_output,
@@ -365,6 +383,15 @@ pub fn run() {
             run_smoke_test,
             restore_snapshot,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| {
+        // Kill the llama-server sidecar on quit (Phase 3b lifecycle).
+        if let tauri::RunEvent::Exit = event {
+            if let Some(mgr) = ENGINE_MGR.get() {
+                mgr.stop();
+            }
+        }
+    });
 }

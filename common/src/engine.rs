@@ -241,6 +241,203 @@ impl EngineBackend for OllamaBackend {
     }
 }
 
+/// Phase 3b backend: llama.cpp's OpenAI-compatible `llama-server` on localhost
+/// (bound to 127.0.0.1 only, doc 02). One model per process — the app's engine manager
+/// spawns it with the installed model and kills it on quit. Models live in
+/// `~/.flint/models/` as GGUF files installed by `common::downloader`.
+pub struct LlamaCppBackend {
+    client: reqwest::Client,
+    base_url: String,
+    models_dir: std::path::PathBuf,
+}
+
+impl LlamaCppBackend {
+    pub fn new(base_url: String) -> Self {
+        Self::new_in(base_url, crate::config::models_dir())
+    }
+
+    /// Test seam: point the model store somewhere disposable.
+    pub fn new_in(base_url: String, models_dir: std::path::PathBuf) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(600))
+            .build()
+            .expect("reqwest client build");
+        Self { client, base_url, models_dir }
+    }
+}
+
+#[async_trait]
+impl EngineBackend for LlamaCppBackend {
+    async fn health(&self) -> Result<EngineHealth, AppError> {
+        let url = format!("{}/health", self.base_url);
+        match self.client.get(&url).send().await {
+            Ok(r) if r.status().is_success() => {
+                let v: serde_json::Value = r
+                    .json()
+                    .await
+                    .map_err(|e| AppError::Engine(format!("health parse: {e}")))?;
+                if v.get("status").and_then(|x| x.as_str()) == Some("ok") {
+                    Ok(EngineHealth::Running { version: "llama.cpp".into() })
+                } else {
+                    Ok(EngineHealth::NotRunning)
+                }
+            }
+            _ => Ok(EngineHealth::NotRunning),
+        }
+    }
+
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, AppError> {
+        let dir = self.models_dir.clone();
+        let mut out = Vec::new();
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return Ok(out);
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("gguf") {
+                continue;
+            }
+            let meta = match std::fs::metadata(&p) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default();
+            out.push(ModelInfo {
+                name: p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                size_bytes: meta.len(),
+                modified_at: modified,
+            });
+        }
+        Ok(out)
+    }
+
+    async fn ensure_model(
+        &self,
+        desc: &ModelDescriptor,
+        progress: &mut (dyn FnMut(PullProgress) + Send),
+        cancel: &AtomicBool,
+    ) -> Result<(), AppError> {
+        let url = format!(
+            "https://huggingface.co/{}/resolve/main/{}",
+            desc.hf_repo, desc.hf_file
+        );
+        let dest = self.models_dir.clone().join(desc.hf_file);
+        crate::downloader::download(&self.client, &url, &dest, desc.sha256, progress, cancel)
+            .await
+    }
+
+    async fn delete_model(&self, tag: &str) -> Result<(), AppError> {
+        // The store lists GGUF file names (settings delete passes hf_file); also accept
+        // the tag (cookbook identity).
+        let desc = crate::cookbook::find_by_tag(tag)
+            .or_else(|| crate::cookbook::find_by_hf_file(tag));
+        let Some(desc) = desc else {
+            return Ok(());
+        };
+        let path = self.models_dir.clone().join(desc.hf_file);
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .map_err(|e| AppError::Io { path, source: e })?;
+        }
+        Ok(())
+    }
+
+    async fn chat(
+        &self,
+        desc: &ModelDescriptor,
+        messages: &[ChatMessage],
+        emit: &mut (dyn FnMut(ChatEvent) + Send),
+        cancel: &AtomicBool,
+    ) -> Result<String, AppError> {
+        let url = format!("{}/v1/chat/completions", self.base_url);
+        let api_messages: Vec<serde_json::Value> = messages
+            .iter()
+            .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+            .collect();
+        let body = serde_json::json!({
+            "model": desc.hf_file,
+            "messages": api_messages,
+            "stream": true,
+            "chat_template_kwargs": { "enable_thinking": desc.think }
+        });
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Engine(format!("chat start: {e}")))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(AppError::Engine(format!("chat http {status}: {text}")));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buf: Vec<u8> = Vec::new();
+        let mut full = String::new();
+        while let Some(chunk) = stream.next().await {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(AppError::Engine("chat cancelled".into()));
+            }
+            let chunk = chunk.map_err(|e| AppError::Engine(format!("chat stream: {e}")))?;
+            buf.extend_from_slice(&chunk);
+            while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+                let raw: Vec<u8> = buf.drain(..=pos).collect();
+                let line = String::from_utf8_lossy(&raw).trim().to_string();
+                if let Some(state) = process_sse_line(&line, emit, &mut full)? {
+                    if state == SseState::Done {
+                        return Ok(full);
+                    }
+                }
+            }
+        }
+        if !buf.is_empty() {
+            let line = String::from_utf8_lossy(&buf).trim().to_string();
+            if !line.is_empty() {
+                process_sse_line(&line, emit, &mut full)?;
+            }
+        }
+        Ok(full)
+    }
+}
+
+/// Outcome of one OpenAI-compat SSE line.
+#[derive(PartialEq)]
+enum SseState {
+    Continue,
+    Done,
+}
+
+/// Parse one `data: {...}` line (OpenAI streaming shape). Ignores `[DONE]` →
+/// returns `Done`; skips non-data lines and reasoning deltas.
+fn process_sse_line(
+    line: &str,
+    emit: &mut dyn FnMut(ChatEvent),
+    full: &mut String,
+) -> Result<Option<SseState>, AppError> {
+    let Some(data) = line.strip_prefix("data:") else {
+        return Ok(None);
+    };
+    let data = data.trim();
+    if data == "[DONE]" {
+        return Ok(Some(SseState::Done));
+    }
+    let v: serde_json::Value =
+        serde_json::from_str(data).map_err(|e| AppError::Engine(format!("sse line: {e}")))?;
+    let delta = v["choices"][0]["delta"]["content"].as_str().unwrap_or("");
+    if !delta.is_empty() {
+        full.push_str(delta);
+        emit(ChatEvent::Delta { content: delta.to_string() });
+    }
+    Ok(Some(SseState::Continue))
+}
+
 /// Outcome of one `/api/pull` NDJSON line.
 enum PullLine {
     Continue,
@@ -323,6 +520,9 @@ mod tests {
             size_gb: 22.3,
             license: "Apache-2.0",
             source: "https://ollama.com/library/qwen3.6",
+            hf_repo: "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+            hf_file: "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+            sha256: "2f2df1e8b2e92b642c1850ea1734b341cc8ca5098c42cc0a8b8c436a8d4751ab",
             num_ctx: 16384,
             think: false,
             agent: crate::types::AgentCapability::Locked,
@@ -585,5 +785,134 @@ mod tests {
             .collect();
         assert_eq!(joined, reply, "deltas must reassemble the full reply");
         println!("reply: {reply:?}");
+    }
+
+    // ============================ LlamaCppBackend ============================
+
+    fn llama_desc() -> ModelDescriptor {
+        desc("qwen3.6:latest")
+    }
+
+    #[tokio::test]
+    async fn llama_health_running() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(GET).path("/health");
+            then.status(200).body(r#"{"status":"ok"}"#);
+        });
+        let backend = LlamaCppBackend::new(server.base_url());
+        let health = backend.health().await.unwrap();
+        assert_eq!(health, EngineHealth::Running { version: "llama.cpp".into() });
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn llama_health_not_running_when_unreachable() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let backend = LlamaCppBackend::new(format!("http://127.0.0.1:{port}"));
+        let health = backend.health().await.unwrap();
+        assert_eq!(health, EngineHealth::NotRunning);
+    }
+
+    #[tokio::test]
+    async fn llama_list_models_scans_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let gguf = dir.path().join("Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf");
+        std::fs::write(&gguf, "model bytes").unwrap();
+        std::fs::write(dir.path().join("partial.gguf.part"), "partial").unwrap();
+        let backend = LlamaCppBackend::new_in("http://127.0.0.1:1".into(), dir.path().to_path_buf());
+        let models = backend.list_models().await.unwrap();
+        assert_eq!(models.len(), 1, "the .part file must not count");
+        assert_eq!(models[0].name, "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf");
+        assert_eq!(models[0].size_bytes, 11);
+    }
+
+    #[tokio::test]
+    async fn llama_delete_model_removes_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf");
+        std::fs::write(&file, "x").unwrap();
+        let backend = LlamaCppBackend::new_in("http://127.0.0.1:1".into(), dir.path().to_path_buf());
+        backend.delete_model("qwen3.6:latest").await.unwrap();
+        assert!(!file.exists());
+        // Unknown tag is a no-op, not an error.
+        backend.delete_model("nope:latest").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn llama_chat_streams_sse_and_returns_full() {
+        let server = MockServer::start();
+        let sse = [
+            r#"data: {"choices":[{"delta":{"content":"Hel"}}]}"#,
+            r#"data: {"choices":[{"delta":{"content":"lo"}}]}"#,
+            r#"data: {"choices":[{"delta":{"content":" there"}}]}"#,
+            r#"data: [DONE]"#,
+        ]
+        .join("\n");
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/v1/chat/completions")
+                .json_body_partial(
+                    serde_json::json!({
+                        "model": "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf",
+                        "stream": true,
+                        "chat_template_kwargs": { "enable_thinking": false }
+                    })
+                    .to_string(),
+                );
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(sse);
+        });
+        let backend = LlamaCppBackend::new(server.base_url());
+        let mut events: Vec<ChatEvent> = Vec::new();
+        let cancel = AtomicBool::new(false);
+        let full = backend
+            .chat(&llama_desc(), &[msg("user", "hi")], &mut |e| events.push(e), &cancel)
+            .await
+            .expect("chat should stream");
+        assert_eq!(full, "Hello there");
+        assert_eq!(
+            events,
+            vec![
+                ChatEvent::Delta { content: "Hel".into() },
+                ChatEvent::Delta { content: "lo".into() },
+                ChatEvent::Delta { content: " there".into() },
+            ]
+        );
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn llama_chat_reports_engine_error() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST).path("/v1/chat/completions");
+            then.status(404).body(r#"{"error":{"message":"model not found"}}"#);
+        });
+        let backend = LlamaCppBackend::new(server.base_url());
+        let cancel = AtomicBool::new(false);
+        let res = backend.chat(&llama_desc(), &[], &mut |_| {}, &cancel).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("404"));
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn llama_chat_honors_cancel() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST).path("/v1/chat/completions");
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(r#"data: {"choices":[{"delta":{"content":"hi"}}]}"#);
+        });
+        let backend = LlamaCppBackend::new(server.base_url());
+        let cancel = AtomicBool::new(true);
+        let res = backend.chat(&llama_desc(), &[], &mut |_| {}, &cancel).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("cancelled"));
     }
 }

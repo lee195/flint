@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { deleteModel, engineStatus, launchOllama } from "@/lib/tauri-commands";
+import { deleteModel, engineStatus, startEngine } from "@/lib/tauri-commands";
 import type { EngineStatusView, ModelInfo } from "@/lib/types";
 import { usePolling } from "@/composables/use-polling";
 
@@ -25,7 +25,7 @@ usePolling(refresh, 5000);
 async function doLaunch() {
   launching.value = true;
   try {
-    await launchOllama();
+    await startEngine();
     await new Promise((r) => setTimeout(r, 1500));
     await refresh();
   } catch (e) {

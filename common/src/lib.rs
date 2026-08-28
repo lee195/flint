@@ -6,6 +6,7 @@ pub mod agent;
 pub mod chat_store;
 pub mod config;
 pub mod cookbook;
+pub mod downloader;
 pub mod engine;
 pub mod error;
 pub mod probe;

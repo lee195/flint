@@ -71,10 +71,9 @@ const messages = {
         running: "Engine running",
         version: "version",
         notRunning: "Engine not running",
-        launch: "Launch Ollama",
-        launchHint:
-          "Chat needs Ollama running. A later phase bundles a standalone engine instead.",
-        launching: "Launching…",
+        launch: "Start engine",
+        launchHint: "Starts the bundled engine (llama.cpp) with the recommended model.",
+        launching: "Starting…",
       },
       models: {
         title: "Models on disk",
@@ -99,7 +98,7 @@ const messages = {
       confirmYes: "Start new",
       confirmNo: "Keep",
       engineDown: "The engine isn't running — replies need it.",
-      launch: "Launch Ollama",
+      launch: "Start engine",
       error: "Something went wrong.",
       empty: "Ask anything — it runs on this Mac.",
     },

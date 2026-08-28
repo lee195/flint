@@ -52,9 +52,9 @@ export async function deleteModel(tag: string): Promise<void> {
   return invoke<void>("delete_model", { tag });
 }
 
-/** Launch Ollama.app (`/usr/bin/open` — absolute path, doc 05). */
-export async function launchOllama(): Promise<void> {
-  return invoke<void>("launch_ollama");
+/** Start the bundled engine (llama-server) with the recommended model, if installed. */
+export async function startEngine(): Promise<void> {
+  return invoke<void>("start_engine");
 }
 
 /** Chat history + the model it runs on (loads the persisted conversation). */
