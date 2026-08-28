@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 870" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
-  <title>Flint — v0 architecture</title>
-  <desc>Layer diagram of the Flint v0 app: Vue frontend in a Tauri WebView, Tauri Rust backend, shared common crate, Ollama inference engine, local data dir, and Phase 2 additions (dashed).</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 910" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Flint architecture</title>
+  <desc>Layer diagram of the Flint app: Vue frontend in a Tauri WebView, Tauri Rust backend, shared common crate, the llama.cpp engine sidecar, local data dir, the opencode agent harness, and the future Phase 3a (dashed).</desc>
 
   <!-- Title -->
-  <text x="20" y="18" font-size="15" font-weight="600" fill="#18181b">Flint — v0 architecture</text>
-  <text x="20" y="34" font-size="11" fill="#71717a">Phase 0 + 1 · dashed = Phase 2 (out of v0) · design: flint-design/docs/00–05</text>
+  <text x="20" y="18" font-size="15" font-weight="600" fill="#18181b">Flint architecture</text>
+  <text x="20" y="34" font-size="11" fill="#71717a">Phases 0–3b shipped · dashed = Phase 3a (signing/bundling) · design: flint-design/docs/00–06</text>
 
   <!-- ============ 1 · Frontend ============ -->
   <rect x="20" y="44" width="560" height="210" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
@@ -12,26 +12,33 @@
   <text x="34" y="84" font-size="10" fill="#6366f1">src/ · WKWebView-safe: polling only, hash router, inline banners, i18n (en)</text>
 
   <g font-size="10.5" fill="#1e1b4b">
-    <rect x="34" y="94" width="168" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
-    <text x="46" y="114" font-weight="600" fill="#3730a3">/ onboarding</text>
-    <text x="46" y="132">probe → honesty screen</text>
-    <text x="46" y="147">recommend ONE model</text>
-    <text x="46" y="162">consent-gated install</text>
-    <text x="46" y="177">→ ready to chat</text>
+    <rect x="34" y="94" width="128" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="42" y="112" font-weight="600" fill="#3730a3">/ onboarding</text>
+    <text x="42" y="130">probe → honesty</text>
+    <text x="42" y="145">recommend ONE</text>
+    <text x="42" y="160">consent install</text>
+    <text x="42" y="175">→ ready</text>
 
-    <rect x="214" y="94" width="168" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
-    <text x="226" y="114" font-weight="600" fill="#3730a3">/ chat</text>
-    <text x="226" y="132">plain pane, no params</text>
-    <text x="226" y="147">streamed, ~150ms poll</text>
-    <text x="226" y="162">cancel mid-stream</text>
-    <text x="226" y="177">JSONL transcript</text>
+    <rect x="174" y="94" width="128" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="182" y="112" font-weight="600" fill="#3730a3">/ chat</text>
+    <text x="182" y="130">plain pane</text>
+    <text x="182" y="145">streamed, ~150ms</text>
+    <text x="182" y="160">cancel mid-stream</text>
+    <text x="182" y="175">JSONL transcript</text>
 
-    <rect x="394" y="94" width="168" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
-    <text x="406" y="114" font-weight="600" fill="#3730a3">/ settings</text>
-    <text x="406" y="132">engine status pill</text>
-    <text x="406" y="147">green / amber / grey</text>
-    <text x="406" y="162">launch Ollama</text>
-    <text x="406" y="177">model on-disk / delete</text>
+    <rect x="314" y="94" width="128" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="322" y="112" font-weight="600" fill="#3730a3">/ agent</text>
+    <text x="322" y="130">workspace picker</text>
+    <text x="322" y="145">tool cards</text>
+    <text x="322" y="160">permission banners</text>
+    <text x="322" y="175">snapshot restore</text>
+
+    <rect x="454" y="94" width="128" height="100" rx="6" fill="#ffffff" stroke="#c7d2fe"/>
+    <text x="462" y="112" font-weight="600" fill="#3730a3">/ settings</text>
+    <text x="462" y="130">engine status pill</text>
+    <text x="462" y="145">green / amber / grey</text>
+    <text x="462" y="160">start engine</text>
+    <text x="462" y="175">model on-disk / delete</text>
   </g>
 
   <rect x="34" y="204" width="532" height="34" rx="6" fill="#ffffff" fill-opacity="0.6" stroke="#c7d2fe"/>
@@ -42,92 +49,97 @@
   <polygon points="300,277 295,268 305,268" fill="#64748b"/>
 
   <!-- ============ 2 · Backend ============ -->
-  <rect x="20" y="278" width="560" height="116" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+  <rect x="20" y="278" width="560" height="150" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
   <text x="34" y="302" font-size="13" font-weight="600" fill="#065f46">2 · Tauri 2 Rust backend (src-tauri/)</text>
   <g font-size="10.5" fill="#064e3b">
     <text x="34" y="322">· #[tauri::command]s registered in generate_handler![]</text>
     <text x="34" y="339">· capability ACL (capabilities/default.json)</text>
     <text x="34" y="356">· buffered event queue — backend buffers, frontend polls (no events)</text>
+    <text x="34" y="380" font-weight="600">engine_mgr.rs — llama-server sidecar lifecycle</text>
+    <text x="34" y="396">spawn with installed model · pick-free-port · kill on quit</text>
+    <text x="34" y="412">agent.rs — opencode harness (permission net, smoke gate, snapshot)</text>
   </g>
 
   <!-- arrow: backend -> common -->
-  <line x1="300" y1="394" x2="300" y2="412" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="300,417 295,408 305,408" fill="#64748b"/>
+  <line x1="300" y1="428" x2="300" y2="446" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="300,451 295,442 305,442" fill="#64748b"/>
 
   <!-- ============ 3 · common ============ -->
-  <rect x="20" y="418" width="560" height="150" rx="8" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
-  <text x="34" y="442" font-size="13" font-weight="600" fill="#92400e">3 · common crate — shared, no Tauri deps (serde only)</text>
+  <rect x="20" y="452" width="560" height="160" rx="8" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <text x="34" y="476" font-size="13" font-weight="600" fill="#92400e">3 · common crate — shared, no Tauri deps</text>
+  <text x="34" y="492" font-size="10" fill="#92400e">config — canonical data-dir owner ~/.flint/</text>
 
   <g font-size="10.5" fill="#451a03">
-    <rect x="34" y="452" width="266" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
-    <text x="46" y="471" font-weight="600" fill="#92400e">probe — sysctl</text>
-    <text x="46" y="487">chip + RAM → capability tier</text>
+    <rect x="34" y="500" width="266" height="46" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="46" y="519" font-weight="600" fill="#92400e">probe — sysctl</text>
+    <text x="46" y="535">chip + RAM → capability tier</text>
 
-    <rect x="310" y="452" width="256" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
-    <text x="322" y="471" font-weight="600" fill="#92400e">cookbook — tier table</text>
-    <text x="322" y="487">4 tiers → one model (pinned, "as of")</text>
+    <rect x="310" y="500" width="256" height="46" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="322" y="519" font-weight="600" fill="#92400e">cookbook — tier table</text>
+    <text x="322" y="535">4 tiers → one model + HF GGUF refs (sha256)</text>
 
-    <rect x="34" y="512" width="266" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
-    <text x="46" y="531" font-weight="600" fill="#92400e">EngineBackend trait</text>
-    <text x="46" y="547">health · list · ensure · chat</text>
+    <rect x="34" y="554" width="266" height="46" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="46" y="573" font-weight="600" fill="#92400e">EngineBackend trait</text>
+    <text x="46" y="589">LlamaCppBackend (active) · Ollama (dev fallback)</text>
 
-    <rect x="310" y="512" width="256" height="50" rx="6" fill="#ffffff" stroke="#fde68a"/>
-    <text x="322" y="531" font-weight="600" fill="#92400e">config — data-dir owner</text>
-    <text x="322" y="547">~/.flint/ canonical path</text>
+    <rect x="310" y="554" width="256" height="46" rx="6" fill="#ffffff" stroke="#fde68a"/>
+    <text x="322" y="573" font-weight="600" fill="#92400e">downloader</text>
+    <text x="322" y="589">HF GGUF · resumable Range · sha256 verify</text>
   </g>
 
-  <!-- arrow: common -> Ollama (HTTP) -->
-  <text x="560" y="462" font-size="10" fill="#475569" text-anchor="end">HTTP localhost:11434</text>
-  <line x1="580" y1="477" x2="606" y2="477" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="611,477 602,472 602,482" fill="#64748b"/>
+  <!-- arrow: common -> engine (HTTP) -->
+  <text x="560" y="502" font-size="10" fill="#475569" text-anchor="end">HTTP OpenAI-compat /v1</text>
+  <line x1="580" y1="517" x2="606" y2="517" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="611,517 602,512 602,522" fill="#64748b"/>
 
   <!-- arrow: common -> data dir -->
-  <line x1="300" y1="568" x2="300" y2="586" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="300,591 295,582 305,582" fill="#64748b"/>
+  <line x1="300" y1="612" x2="300" y2="630" stroke="#64748b" stroke-width="1.5"/>
+  <polygon points="300,635 295,626 305,626" fill="#64748b"/>
 
   <!-- ============ Local data ============ -->
-  <rect x="20" y="592" width="560" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="34" y="614" font-size="13" font-weight="600" fill="#0f172a">Local data — ~/.flint/</text>
+  <rect x="20" y="636" width="560" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="34" y="658" font-size="13" font-weight="600" fill="#0f172a">Local data — ~/.flint/</text>
   <g font-size="10.5" fill="#334155">
-    <text x="34" y="634">· config · chat transcripts (JSONL per conversation)</text>
-    <text x="34" y="650">· models on disk live in the engine's store (v0: Ollama)</text>
+    <text x="34" y="678">· models/ (GGUF store) · chat/ (JSONL) · snapshots/ (git2 repos)</text>
+    <text x="34" y="694">· bin/ (llama-server dev vendor) · opencode/ (config + confinement plugin)</text>
   </g>
 
-  <!-- ============ Engine (v0) ============ -->
-  <rect x="610" y="418" width="310" height="150" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
-  <text x="624" y="442" font-size="13" font-weight="600" fill="#0f172a">Inference engine — v0</text>
-  <text x="624" y="458" font-size="10.5" fill="#475569">OllamaBackend (EngineBackend impl)</text>
+  <!-- ============ Engine ============ -->
+  <rect x="610" y="452" width="310" height="160" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="624" y="476" font-size="13" font-weight="600" fill="#0f172a">Engine — llama.cpp</text>
+  <text x="624" y="492" font-size="10.5" fill="#475569">LlamaCppBackend · llama-server sidecar</text>
   <g font-size="10.5" fill="#334155">
-    <text x="624" y="478">localhost:11434 — HTTP from Rust only</text>
-    <text x="624" y="494">/api/chat · /api/pull · /api/tags</text>
-    <text x="624" y="510">frontend never does HTTP</text>
-    <text x="624" y="526">on disk already: qwen3.6 · qwen3-coder</text>
-    <text x="624" y="548" font-size="9.5" fill="#94a3b8">resumable pulls (consent-gated, doc 02)</text>
+    <text x="624" y="512">localhost:&lt;port&gt; — HTTP from Rust only</text>
+    <text x="624" y="528">/v1/chat/completions (SSE) · /health</text>
+    <text x="624" y="544">spawned by engine_mgr · Metal offload</text>
+    <text x="624" y="560">model: GGUF from ~/.flint/models/</text>
+    <text x="624" y="576">pinned: llama.cpp b10667</text>
+    <text x="624" y="598" font-size="9.5" fill="#94a3b8">OllamaBackend — dev fallback only (not wired)</text>
   </g>
 
-  <!-- arrow: Ollama -> llama.cpp (phase 2 swap) -->
-  <line x1="765" y1="568" x2="765" y2="584" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>
-  <polygon points="765,589 760,580 770,580" fill="#94a3b8"/>
+  <!-- ============ Agent harness (shipped) ============ -->
+  <rect x="610" y="636" width="310" height="76" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="624" y="658" font-size="12" font-weight="600" fill="#0f172a">opencode harness + safety net</text>
+  <text x="624" y="678" font-size="10.5" fill="#475569">agent mode · capability smoke gate (tier + pass)</text>
+  <text x="624" y="694" font-size="10.5" fill="#475569">permission net · git2 snapshot / undo</text>
 
-  <!-- ============ Phase 2 (dashed) ============ -->
-  <rect x="610" y="592" width="310" height="76" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text x="624" y="614" font-size="12" font-weight="600" fill="#475569">llama.cpp sidecar (bundled) — Phase 2 swap</text>
-  <text x="624" y="634" font-size="10.5" fill="#64748b">same EngineBackend trait · HF download (resume + sha256)</text>
-  <text x="624" y="650" font-size="10.5" fill="#64748b">build-from-source provenance (doc 02/05)</text>
+  <!-- arrow: agent -> engine -->
+  <line x1="765" y1="612" x2="765" y2="626" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <polygon points="765,631 760,622 770,622" fill="#64748b"/>
 
-  <rect x="610" y="688" width="310" height="76" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text x="624" y="710" font-size="12" font-weight="600" fill="#475569">opencode harness + safety net — Phase 2</text>
-  <text x="624" y="730" font-size="10.5" fill="#64748b">agent mode · capability smoke test</text>
-  <text x="624" y="746" font-size="10.5" fill="#64748b">permission net · git2 snapshot / undo</text>
+  <!-- ============ Phase 3a (dashed, future) ============ -->
+  <rect x="610" y="722" width="310" height="60" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="624" y="744" font-size="12" font-weight="600" fill="#475569">Phase 3a — signing / bundling (paused)</text>
+  <text x="624" y="764" font-size="10.5" fill="#64748b">signed+notarized .dmg · opencode externalBin · updater</text>
 
   <!-- ============ Hardware ============ -->
-  <rect x="20" y="784" width="900" height="70" rx="8" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
-  <text x="34" y="808" font-size="13" font-weight="600" fill="#6b21a8">Hardware — Apple Silicon (this machine: M5 Pro / 64 GB)</text>
-  <text x="34" y="826" font-size="10.5" fill="#581c87">probed at launch via sysctl (machdep.cpu.brand_string, hw.memsize) → RAM tier gates the recommendation</text>
-  <text x="34" y="842" font-size="10.5" fill="#581c87">agent mode locked until Phase 2 (tier floor + smoke test, doc 01)</text>
+  <rect x="20" y="802" width="900" height="70" rx="8" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+  <text x="34" y="826" font-size="13" font-weight="600" fill="#6b21a8">Hardware — Apple Silicon (this machine: M5 Pro / 64 GB)</text>
+  <text x="34" y="844" font-size="10.5" fill="#581c87">probed at launch via sysctl (machdep.cpu.brand_string, hw.memsize) → RAM tier gates the recommendation</text>
+  <text x="34" y="860" font-size="10.5" fill="#581c87">agent mode unlocked by tier floor (GB32+) AND a passed capability smoke test</text>
 
   <!-- probe arrow: common -> hardware (dashed, left margin) -->
-  <polyline points="34,477 12,477 12,784" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>
-  <polygon points="12,789 7,780 17,780" fill="#94a3b8"/>
-  <text x="5" y="630" font-size="10" fill="#64748b" transform="rotate(-90 5 630)" text-anchor="middle">sysctl probe</text>
+  <polyline points="34,517 12,517 12,802" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <polygon points="12,807 7,798 17,798" fill="#94a3b8"/>
+  <text x="5" y="660" font-size="10" fill="#64748b" transform="rotate(-90 5 660)" text-anchor="middle">sysctl probe</text>
 </svg>

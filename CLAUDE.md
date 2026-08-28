@@ -37,8 +37,9 @@ a **bundled `llama-server`** (llama.cpp) with self-downloaded GGUF models — **
   smoke test (`common::smoke`) gates unlock (tier GB32+ AND passed); `git2` detached snapshot
   before each run + "Restore snapshot" (`common::snapshot`, `~/.flint/snapshots/`); path-
   confinement `tool.execute.before` plugin written to `~/.flint/opencode/plugin/`.
-- Probe (`common::probe`), cookbook (`common::cookbook`, top tier `qwen3.6:latest`,
-  `think:false`), install via `common::engine` (`OllamaBackend`).
+- Probe (`common::probe`), cookbook (`common::cookbook`, top tier `qwen3.6:latest` =
+  Qwen3.5-35B-A3B GGUF, `think:false`), install via `common::downloader` +
+  `LlamaCppBackend::ensure_model`.
 
 **Engine: `LlamaCppBackend` (llama.cpp) is the active engine** behind the `EngineBackend`
 trait (`common/`, Phase 3b full swap); `OllamaBackend` remains as a dev fallback only.

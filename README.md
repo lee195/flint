@@ -2,26 +2,31 @@
 
 A standalone macOS app that gives a non-technical user working local AI with zero
 dev-tool gates. It probes the machine's hardware, recommends **one** model that fits
-(the "cookbook"), installs it on consent, and offers a plain **chat** — all local, no
-cloud, no vendor. Its reason to exist is **vendor resilience** (a single-point-of-failure
-hedge must be independent of any vendor's cloud). Design docs: `../flint-design/`
-(`STATE.md` → `PLAN.md` → `docs/00`–`05`).
+(the "cookbook"), downloads it on consent, and offers a plain **chat** plus — on capable
+hardware — an **agent mode** (files, commands, multi-step work) — all local, no cloud,
+no vendor, **no second installs**. Its reason to exist is **vendor resilience** (a
+single-point-of-failure hedge must be independent of any vendor's cloud). Design docs:
+`../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`06`).
 
-**Status: v0 (Phases 0–2)** — probe + cookbook + engine + install + chat + **agent mode with
-a safety net** are shipped. The app probes the hardware, recommends one model, installs it on
-consent, chats with it (streamed, persisted), and — on capable hardware — runs an agent in a
-folder you choose, asking permission for every action and offering snapshot restore.
-Phase 3 (packaging/signing + standalone llama.cpp engine) is next.
+**Status: Phases 0–3b shipped.** Probe + cookbook + engine + install + chat + agent mode
+with a safety net, and the **standalone engine** — the app now runs on its own bundled
+`llama-server` (llama.cpp) over GGUF models it downloads itself (resumable, sha256-pinned)
+with **no Ollama dependency**. Agent mode asks permission for every action (inline banners)
+and offers snapshot restore. What remains of Phase 3: 3a (signing/notarization + bundling
+opencode) is paused on a Developer ID certificate; the signing runbook is in
+`docs/signing-runbook.md`.
 
 ## Architecture
 
-![Flint v0 architecture](docs/architecture.svg)
+![Flint architecture](docs/architecture.svg)
 
 The Vue frontend (in a WKWebView) talks to the Tauri Rust backend over typed `invoke()`
 wrappers, polling for state rather than listening for events. Shared logic lives in the
-`common` crate — hardware probe, cookbook tier table, and the `EngineBackend` trait, which
-v0 satisfies with **Ollama** (localhost only; the frontend never does HTTP). Local data
-lives under `~/.flint/`. Dashed boxes are Phase 2 (agent mode, llama.cpp sidecar).
+`common` crate — hardware probe, cookbook tier table, the GGUF downloader, and the
+`EngineBackend` trait, which the app satisfies with **`LlamaCppBackend`** (an
+`llama-server` sidecar spawned with the installed model by `engine_mgr`, localhost only;
+the frontend never does HTTP). Local data lives under `~/.flint/` (`models/`, `chat/`,
+`snapshots/`, `bin/`, `opencode/`).
 
 ## Stack
 
@@ -36,20 +41,25 @@ lives under `~/.flint/`. Dashed boxes are Phase 2 (agent mode, llama.cpp sidecar
 ## Commands
 
 ```bash
-deno install            # install npm deps into node_modules
-deno task tauri dev     # run the full desktop app — primary dev loop
-deno task dev           # Vite frontend only (no Rust; `invoke` calls will fail)
-deno task build         # type-check (vue-tsc) + build frontend to dist/
-deno task tauri build   # produce a distributable native binary/installer (unsigned in v0)
-cargo build --workspace # build the Rust workspace (common + src-tauri)
-cargo test -p common    # shared-crate unit tests
+deno install                    # install npm deps into node_modules
+deno task tauri dev             # run the full desktop app — primary dev loop
+deno task dev                   # Vite frontend only (no Rust; `invoke` calls will fail)
+deno task build                 # type-check (vue-tsc) + build frontend to dist/
+deno task tauri build           # produce a distributable native binary/installer (unsigned; signing runbook in docs/)
+deno task fetch-llama-server    # vendor the pinned llama.cpp release (sha256-verified) to ~/.flint/bin/
+cargo build --workspace         # build the Rust workspace (common + src-tauri)
+cargo test -p common            # shared-crate unit tests
 ```
 
 ## Structure
 
 - `common/` — shared no-Tauri crate: canonical data-dir owner (`~/.flint/`), error type,
-  and (from Phase 0) the hardware probe, cookbook tier table, and engine backend trait.
-- `src-tauri/` — Tauri app backend (commands + plugins; `main.rs` is a thin shim).
+  hardware probe, cookbook tier table (incl. `hf_repo`/`hf_file`/`sha256` GGUF refs), the
+  `EngineBackend` trait with `OllamaBackend` (dev fallback) + `LlamaCppBackend` impls, the
+  resumable GGUF downloader, chat transcripts, the opencode client, the capability smoke
+  record, and the git2 snapshot.
+- `src-tauri/` — Tauri app backend: commands + plugins, `engine_mgr.rs` (the llama-server
+  sidecar lifecycle), and `agent.rs` (the opencode harness); `main.rs` is a thin shim.
 - `src/` — Vue frontend (`main.ts`, `App.vue`, `router.ts`, `i18n.ts`, `views/`, `lib/`,
   `composables/`).
 
