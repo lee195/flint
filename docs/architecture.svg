@@ -4,7 +4,7 @@
 
   <!-- Title -->
   <text x="20" y="18" font-size="15" font-weight="600" fill="#18181b">Flint architecture</text>
-  <text x="20" y="34" font-size="11" fill="#71717a">Phases 0–3b shipped · dashed = Phase 3a (signing/bundling) · design: flint-design/docs/00–06</text>
+  <text x="20" y="34" font-size="11" fill="#71717a">Phases 0–3b shipped · dashed = Phase 3a (signing/bundling) · design: design/docs/00–06</text>
 
   <!-- ============ 1 · Frontend ============ -->
   <rect x="20" y="44" width="560" height="210" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>

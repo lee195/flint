@@ -14,7 +14,7 @@ import type {
 /**
  * Typed wrappers around Tauri `invoke()` calls. One function per Rust command
  * registered in src-tauri/src/lib.rs — keeps the frontend/backend contract in one
- * place, mirroring skills-manager's `lib/tauri-commands.ts` pattern.
+ * place — keeps the frontend/backend contract in one file.
  *
  * Add a new command: declare it here, then add the `#[tauri::command]` fn AND
  * register it in `generate_handler![]` in src-tauri/src/lib.rs.

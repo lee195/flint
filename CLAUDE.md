@@ -8,8 +8,8 @@ Guidance for Claude Code when working in this repository.
 zero dev-tool gates: it probes the machine's hardware, recommends **one** model that fits
 (the "cookbook"), installs it on consent, and offers a plain **chat** plus — on capable
 hardware — an **agent mode** — all local, no cloud, no vendor. Its reason to exist is
-**vendor resilience** (flint-design doc 00). Design docs live in the sibling
-`../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`06`); `docs/06-env.md` holds the
+**vendor resilience** (design doc 00). Design docs live in the repo under
+`design/` (`STATE.md` → `PLAN.md` → `docs/00`–`06`); `design/docs/06-env.md` holds the
 canonical machine/toolchain facts (versions, paths, commands, cert status) so sessions start
 lean.
 
@@ -64,8 +64,8 @@ All HTTP happens in Rust — the frontend never does HTTP.
 **Toolchain (binding, this repo's decision):** Deno is the JS runtime + task runner.
 `deno.json` tasks: `dev`, `build` (`vue-tsc --noEmit && vite build`), `check`, `preview`,
 `tauri`. `deno task` resolves `node_modules/.bin` the way npm scripts do. No Bun, no npm
-scripts. Rust/Cargo is untouched by this. `ember-deno` is the in-house Deno + Vue + Vite
-toolchain reference (pattern only — its `deno desktop` shell is not used; Tauri stays).
+scripts. Rust/Cargo is untouched by this. The pattern (package.json for deps, deno.json for
+tasks) is this repo's own; the experimental `deno desktop` shell is not used — Tauri stays.
 
 **Data dir:** `~/.flint/`, owned by `common::config::data_dir()` — resolved by that one
 function only, never Tauri's `app_data_dir()` (a path split silently breaks shared state).
@@ -118,7 +118,7 @@ new plugin APIs must be added there or calls are denied at runtime. Currently on
 **Case convention.** IPC structs (`common/src/types.rs` ↔ `src/lib/types.ts`) are
 serde-renamed to **camelCase**; stored payloads (chat transcripts, Phase 1) stay
 **snake_case**. TS interfaces for parsed payloads must be snake_case — a camelCase field
-reads as `undefined` and renders blank (a footgun that hit single-brain-cell).
+reads as `undefined` and renders blank (a footgun from prior IPC work).
 
 ### Routing
 
@@ -128,8 +128,8 @@ webview. Do not switch to HTML history mode. Views are lazy-loaded.
 ### Polling
 
 Backend → frontend state flows via **polling**, never Tauri events. The primitive is
-`src/composables/use-polling.ts` (5s cadence, spark doc 02). Chat streaming polls its
-buffered run-loop at ~150ms (skills-manager's `poll_skill_output` copy source): the backend
+`src/composables/use-polling.ts` (5s cadence, established pattern). Chat streaming polls its
+buffered run-loop at ~150ms (the buffered-poll pattern): the backend
 buffers `ChatEvent`s in `ChatState.output` and `poll_chat_output` drains them; the assistant
 reply is persisted (JSONL) by the backend on completion.
 
@@ -142,8 +142,8 @@ catalog pass). Use `useI18n()` → `t("path.to.key")`.
 ## WKWebView rules (binding)
 
 macOS runs the frontend in WKWebView, which has frozen on past projects when certain UI
-patterns are used. These rules come from `spark-design/docs/02-wkwebview-constraints.md`
-and apply to every change in this app:
+patterns are used. These rules are hard-won from a WKWebView freeze on a prior project and
+apply to every change in this app:
 
 1. **Hash router only** (already set). No HTML history mode.
 2. **No portal dialogs.** All prompts and confirmations are **inline banners** rendered

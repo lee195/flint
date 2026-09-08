@@ -1,4 +1,4 @@
-//! Pre-run workspace snapshot (doc 04 + spark doc 07): a detached-git repo per workspace
+//! Pre-run workspace snapshot (doc 04): a detached-git repo per workspace
 //! under `~/.flint/snapshots/<hash>/` whose work tree IS the user's workspace folder
 //! (never touched — no `.git/` created inside it). Snapshot before each file-writing agent
 //! run; "restore" checks the working files back to the pre-run commit. Uses `git2`, never
@@ -29,7 +29,7 @@ fn repo_path_for(root: &Path, workspace: &Path) -> PathBuf {
 }
 
 /// Stable short hash of the workspace path (FNV-1a, hex). A moved/renamed workspace is
-/// treated as new (spark doc 07's hash-by-path stance).
+/// treated as new (hash-by-path stance).
 fn workspace_hash(workspace: &Path) -> String {
     use std::hash::Hasher;
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -92,7 +92,7 @@ fn before_run_in(root: &Path, workspace: &Path, label: &str) -> Result<git2::Oid
     Ok(commit)
 }
 
-/// Restore the workspace to a pre-run snapshot commit (spark doc 07's undo).
+/// Restore the workspace to a pre-run snapshot commit (snapshot undo).
 pub fn restore(workspace: &Path, commit_id: &str) -> Result<(), AppError> {
     restore_in(&snapshot_root(), workspace, commit_id)
 }
@@ -108,7 +108,7 @@ fn restore_in(root: &Path, workspace: &Path, commit_id: &str) -> Result<(), AppE
     let commit = repo.find_commit(oid).map_err(|e| AppError::Engine(format!("snapshot commit: {e}")))?;
     let tree = commit.tree().map_err(|e| AppError::Engine(format!("snapshot tree: {e}")))?;
 
-    // Reset index to the snapshot, then force-checkout the working files (spark doc 07).
+    // Reset index to the snapshot, then force-checkout the working files.
     let obj = repo
         .find_object(commit.id(), None)
         .map_err(|e| AppError::Engine(format!("snapshot obj: {e}")))?;

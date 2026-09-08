@@ -2,7 +2,7 @@
 //! chosen workspace, drives it over HTTP, and buffers `AgentEvent`s for the polled
 //! frontend. Also owns the capability smoke test (doc 01) and the pre-run snapshot hook
 //! (doc 04). Permission prompts are buffered and answered via `respond_permission`;
-//! unanswered asks auto-deny after 5 minutes (hackathon pattern, ported — not a modal).
+//! unanswered asks auto-deny after 5 minutes (a prior consent-gate pattern, ported — not a modal).
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};

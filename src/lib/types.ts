@@ -2,7 +2,7 @@
  * IPC types shared between the frontend and the Rust backend (mirroring
  * `common::types`). IPC structs are serde-renamed to camelCase; anything that is a
  * *stored payload* stays snake_case on both sides — a mismatch reads as `undefined`
- * and renders blank (a footgun that hit single-brain-cell in Phase 1/2).
+ * and renders blank (a footgun from prior IPC work).
  */
 
 export type Tier = "GB8" | "GB16" | "GB32" | "GB64";

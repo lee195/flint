@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
-/* Minimal semantic tokens for v0 (refined to the Seibert/SDS palette later, per
-   single-brain-cell's design-token practice). */
+/* Minimal semantic tokens for v0 (refined to a full palette later). */
 
 @theme {
   --color-background: #ffffff;

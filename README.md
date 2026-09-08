@@ -6,7 +6,7 @@ dev-tool gates. It probes the machine's hardware, recommends **one** model that 
 hardware — an **agent mode** (files, commands, multi-step work) — all local, no cloud,
 no vendor, **no second installs**. Its reason to exist is **vendor resilience** (a
 single-point-of-failure hedge must be independent of any vendor's cloud). Design docs:
-`../flint-design/` (`STATE.md` → `PLAN.md` → `docs/00`–`06`).
+`design/` (`STATE.md` → `PLAN.md` → `docs/00`–`06`).
 
 **Status: Phases 0–3b shipped.** Probe + cookbook + engine + install + chat + agent mode
 with a safety net, and the **standalone engine** — the app now runs on its own bundled

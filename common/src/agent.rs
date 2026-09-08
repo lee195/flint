@@ -3,7 +3,7 @@
 //! (workspace cwd, isolated config via OPENCODE_CONFIG_DIR + OPENCODE_CONFIG_CONTENT),
 //! talks HTTP with this client, and adapts the SSE bus to the polled event buffer.
 //!
-//! Pinned against opencode 1.18.20 (2026-08-24 verify spike, flint-design/STATE.md).
+//! Pinned against opencode 1.18.20 (2026-08-24 verify spike, design/STATE.md).
 
 use std::path::PathBuf;
 

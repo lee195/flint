@@ -1,6 +1,6 @@
-//! Canonical data-dir owner. Rule (flint-design/STATE.md + PLAN.md): `~/.flint/` is
+//! Canonical data-dir owner. Rule (design/STATE.md + PLAN.md): `~/.flint/` is
 //! resolved by EXACTLY ONE function and nothing else — never Tauri's `app_data_dir()`
-//! (single-brain-cell's canonical-dir lesson: two paths = zero shared data).
+//! (the canonical-dir lesson: two paths = zero shared data).
 
 use std::path::PathBuf;
 
